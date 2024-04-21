@@ -79,6 +79,12 @@ var app = (function () {
         }
         return -1;
     }
+
+    const globals = (typeof window !== 'undefined'
+        ? window
+        : typeof globalThis !== 'undefined'
+            ? globalThis
+            : global);
     function append(target, node) {
         target.appendChild(node);
     }
@@ -108,11 +114,23 @@ var app = (function () {
     function empty() {
         return text('');
     }
+    function listen(node, event, handler, options) {
+        node.addEventListener(event, handler, options);
+        return () => node.removeEventListener(event, handler, options);
+    }
     function attr(node, attribute, value) {
         if (value == null)
             node.removeAttribute(attribute);
         else if (node.getAttribute(attribute) !== value)
             node.setAttribute(attribute, value);
+    }
+    function set_custom_element_data(node, prop, value) {
+        if (prop in node) {
+            node[prop] = typeof node[prop] === 'boolean' && value === '' ? true : value;
+        }
+        else {
+            attr(node, prop, value);
+        }
     }
     function children(element) {
         return Array.from(element.childNodes);
@@ -124,6 +142,62 @@ var app = (function () {
         else {
             node.style.setProperty(key, value, important ? 'important' : '');
         }
+    }
+    // unfortunately this can't be a constant as that wouldn't be tree-shakeable
+    // so we cache the result instead
+    let crossorigin;
+    function is_crossorigin() {
+        if (crossorigin === undefined) {
+            crossorigin = false;
+            try {
+                if (typeof window !== 'undefined' && window.parent) {
+                    void window.parent.document;
+                }
+            }
+            catch (error) {
+                crossorigin = true;
+            }
+        }
+        return crossorigin;
+    }
+    function add_iframe_resize_listener(node, fn) {
+        const computed_style = getComputedStyle(node);
+        if (computed_style.position === 'static') {
+            node.style.position = 'relative';
+        }
+        const iframe = element('iframe');
+        iframe.setAttribute('style', 'display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; ' +
+            'overflow: hidden; border: 0; opacity: 0; pointer-events: none; z-index: -1;');
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.tabIndex = -1;
+        const crossorigin = is_crossorigin();
+        let unsubscribe;
+        if (crossorigin) {
+            iframe.src = "data:text/html,<script>onresize=function(){parent.postMessage(0,'*')}</script>";
+            unsubscribe = listen(window, 'message', (event) => {
+                if (event.source === iframe.contentWindow)
+                    fn();
+            });
+        }
+        else {
+            iframe.src = 'about:blank';
+            iframe.onload = () => {
+                unsubscribe = listen(iframe.contentWindow, 'resize', fn);
+                // make sure an initial resize event is fired _after_ the iframe is loaded (which is asynchronous)
+                // see https://github.com/sveltejs/svelte/issues/4233
+                fn();
+            };
+        }
+        append(node, iframe);
+        return () => {
+            if (crossorigin) {
+                unsubscribe();
+            }
+            else if (unsubscribe && iframe.contentWindow) {
+                unsubscribe();
+            }
+            detach(iframe);
+        };
     }
     function toggle_class(element, name, toggle) {
         element.classList[toggle ? 'add' : 'remove'](name);
@@ -167,6 +241,10 @@ var app = (function () {
             update_scheduled = true;
             resolved_promise.then(flush);
         }
+    }
+    function tick() {
+        schedule_update();
+        return resolved_promise;
     }
     function add_render_callback(fn) {
         render_callbacks.push(fn);
@@ -266,6 +344,19 @@ var app = (function () {
     }
     const outroing = new Set();
     let outros;
+    function group_outros() {
+        outros = {
+            r: 0,
+            c: [],
+            p: outros // parent group
+        };
+    }
+    function check_outros() {
+        if (!outros.r) {
+            run_all(outros.c);
+        }
+        outros = outros.p;
+    }
     function transition_in(block, local) {
         if (block && block.i) {
             outroing.delete(block);
@@ -289,6 +380,99 @@ var app = (function () {
         }
         else if (callback) {
             callback();
+        }
+    }
+    function outro_and_destroy_block(block, lookup) {
+        transition_out(block, 1, 1, () => {
+            lookup.delete(block.key);
+        });
+    }
+    function update_keyed_each(old_blocks, dirty, get_key, dynamic, ctx, list, lookup, node, destroy, create_each_block, next, get_context) {
+        let o = old_blocks.length;
+        let n = list.length;
+        let i = o;
+        const old_indexes = {};
+        while (i--)
+            old_indexes[old_blocks[i].key] = i;
+        const new_blocks = [];
+        const new_lookup = new Map();
+        const deltas = new Map();
+        const updates = [];
+        i = n;
+        while (i--) {
+            const child_ctx = get_context(ctx, list, i);
+            const key = get_key(child_ctx);
+            let block = lookup.get(key);
+            if (!block) {
+                block = create_each_block(key, child_ctx);
+                block.c();
+            }
+            else if (dynamic) {
+                // defer updates until all the DOM shuffling is done
+                updates.push(() => block.p(child_ctx, dirty));
+            }
+            new_lookup.set(key, new_blocks[i] = block);
+            if (key in old_indexes)
+                deltas.set(key, Math.abs(i - old_indexes[key]));
+        }
+        const will_move = new Set();
+        const did_move = new Set();
+        function insert(block) {
+            transition_in(block, 1);
+            block.m(node, next);
+            lookup.set(block.key, block);
+            next = block.first;
+            n--;
+        }
+        while (o && n) {
+            const new_block = new_blocks[n - 1];
+            const old_block = old_blocks[o - 1];
+            const new_key = new_block.key;
+            const old_key = old_block.key;
+            if (new_block === old_block) {
+                // do nothing
+                next = new_block.first;
+                o--;
+                n--;
+            }
+            else if (!new_lookup.has(old_key)) {
+                // remove old block
+                destroy(old_block, lookup);
+                o--;
+            }
+            else if (!lookup.has(new_key) || will_move.has(new_key)) {
+                insert(new_block);
+            }
+            else if (did_move.has(old_key)) {
+                o--;
+            }
+            else if (deltas.get(new_key) > deltas.get(old_key)) {
+                did_move.add(new_key);
+                insert(new_block);
+            }
+            else {
+                will_move.add(old_key);
+                o--;
+            }
+        }
+        while (o--) {
+            const old_block = old_blocks[o];
+            if (!new_lookup.has(old_block.key))
+                destroy(old_block, lookup);
+        }
+        while (n)
+            insert(new_blocks[n - 1]);
+        run_all(updates);
+        return new_blocks;
+    }
+    function validate_each_keys(ctx, list, get_context, get_key) {
+        const keys = new Set();
+        for (let i = 0; i < list.length; i++) {
+            const key = get_key(get_context(ctx, list, i));
+            if (keys.has(key)) {
+                throw new Error('Cannot have duplicate keys in a keyed each');
+            }
+            keys.add(key);
         }
     }
 
@@ -450,6 +634,21 @@ var app = (function () {
         dispatch_dev('SvelteDOMRemove', { node });
         detach(node);
     }
+    function listen_dev(node, event, handler, options, has_prevent_default, has_stop_propagation, has_stop_immediate_propagation) {
+        const modifiers = options === true ? ['capture'] : options ? Array.from(Object.keys(options)) : [];
+        if (has_prevent_default)
+            modifiers.push('preventDefault');
+        if (has_stop_propagation)
+            modifiers.push('stopPropagation');
+        if (has_stop_immediate_propagation)
+            modifiers.push('stopImmediatePropagation');
+        dispatch_dev('SvelteDOMAddEventListener', { node, event, handler, modifiers });
+        const dispose = listen(node, event, handler, options);
+        return () => {
+            dispatch_dev('SvelteDOMRemoveEventListener', { node, event, handler, modifiers });
+            dispose();
+        };
+    }
     function attr_dev(node, attribute, value) {
         attr(node, attribute, value);
         if (value == null)
@@ -500,21 +699,562 @@ var app = (function () {
         $inject_state() { }
     }
 
-    /* src/boat.svelte generated by Svelte v3.59.2 */
-    const file$2 = "src/boat.svelte";
+    /* node_modules/svelte-virtual-list/VirtualList.svelte generated by Svelte v3.59.2 */
+    const file$4 = "node_modules/svelte-virtual-list/VirtualList.svelte";
 
-    function get_each_context$1(ctx, list, i) {
+    function get_each_context$3(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[16] = list[i].id;
-    	child_ctx[17] = list[i].offset;
-    	child_ctx[18] = list[i].horizontal;
-    	child_ctx[19] = list[i].imageSrc;
-    	child_ctx[20] = list[i].type;
-    	child_ctx[21] = list[i].transition;
+    	child_ctx[23] = list[i];
     	return child_ctx;
     }
 
-    // (173:0) {#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}
+    const get_default_slot_changes = dirty => ({ item: dirty & /*visible*/ 16 });
+    const get_default_slot_context = ctx => ({ item: /*row*/ ctx[23].data });
+
+    // (173:26) Missing template
+    function fallback_block(ctx) {
+    	let t;
+
+    	const block = {
+    		c: function create() {
+    			t = text("Missing template");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, t, anchor);
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(t);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: fallback_block.name,
+    		type: "fallback",
+    		source: "(173:26) Missing template",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (171:2) {#each visible as row (row.index)}
+    function create_each_block$3(key_1, ctx) {
+    	let svelte_virtual_list_row;
+    	let t;
+    	let current;
+    	const default_slot_template = /*#slots*/ ctx[14].default;
+    	const default_slot = create_slot(default_slot_template, ctx, /*$$scope*/ ctx[13], get_default_slot_context);
+    	const default_slot_or_fallback = default_slot || fallback_block(ctx);
+
+    	const block = {
+    		key: key_1,
+    		first: null,
+    		c: function create() {
+    			svelte_virtual_list_row = element("svelte-virtual-list-row");
+    			if (default_slot_or_fallback) default_slot_or_fallback.c();
+    			t = space();
+    			set_custom_element_data(svelte_virtual_list_row, "class", "svelte-1tqh76q");
+    			add_location(svelte_virtual_list_row, file$4, 171, 3, 3683);
+    			this.first = svelte_virtual_list_row;
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, svelte_virtual_list_row, anchor);
+
+    			if (default_slot_or_fallback) {
+    				default_slot_or_fallback.m(svelte_virtual_list_row, null);
+    			}
+
+    			append_dev(svelte_virtual_list_row, t);
+    			current = true;
+    		},
+    		p: function update(new_ctx, dirty) {
+    			ctx = new_ctx;
+
+    			if (default_slot) {
+    				if (default_slot.p && (!current || dirty & /*$$scope, visible*/ 8208)) {
+    					update_slot_base(
+    						default_slot,
+    						default_slot_template,
+    						ctx,
+    						/*$$scope*/ ctx[13],
+    						!current
+    						? get_all_dirty_from_scope(/*$$scope*/ ctx[13])
+    						: get_slot_changes(default_slot_template, /*$$scope*/ ctx[13], dirty, get_default_slot_changes),
+    						get_default_slot_context
+    					);
+    				}
+    			}
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(default_slot_or_fallback, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(default_slot_or_fallback, local);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(svelte_virtual_list_row);
+    			if (default_slot_or_fallback) default_slot_or_fallback.d(detaching);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_each_block$3.name,
+    		type: "each",
+    		source: "(171:2) {#each visible as row (row.index)}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$4(ctx) {
+    	let svelte_virtual_list_viewport;
+    	let svelte_virtual_list_contents;
+    	let each_blocks = [];
+    	let each_1_lookup = new Map();
+    	let svelte_virtual_list_viewport_resize_listener;
+    	let current;
+    	let mounted;
+    	let dispose;
+    	let each_value = /*visible*/ ctx[4];
+    	validate_each_argument(each_value);
+    	const get_key = ctx => /*row*/ ctx[23].index;
+    	validate_each_keys(ctx, each_value, get_each_context$3, get_key);
+
+    	for (let i = 0; i < each_value.length; i += 1) {
+    		let child_ctx = get_each_context$3(ctx, each_value, i);
+    		let key = get_key(child_ctx);
+    		each_1_lookup.set(key, each_blocks[i] = create_each_block$3(key, child_ctx));
+    	}
+
+    	const block = {
+    		c: function create() {
+    			svelte_virtual_list_viewport = element("svelte-virtual-list-viewport");
+    			svelte_virtual_list_contents = element("svelte-virtual-list-contents");
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].c();
+    			}
+
+    			set_style(svelte_virtual_list_contents, "padding-top", /*top*/ ctx[5] + "px");
+    			set_style(svelte_virtual_list_contents, "padding-bottom", /*bottom*/ ctx[6] + "px");
+    			set_custom_element_data(svelte_virtual_list_contents, "class", "svelte-1tqh76q");
+    			add_location(svelte_virtual_list_contents, file$4, 166, 1, 3527);
+    			set_style(svelte_virtual_list_viewport, "height", /*height*/ ctx[0]);
+    			set_custom_element_data(svelte_virtual_list_viewport, "class", "svelte-1tqh76q");
+    			add_render_callback(() => /*svelte_virtual_list_viewport_elementresize_handler*/ ctx[17].call(svelte_virtual_list_viewport));
+    			add_location(svelte_virtual_list_viewport, file$4, 160, 0, 3381);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, svelte_virtual_list_viewport, anchor);
+    			append_dev(svelte_virtual_list_viewport, svelte_virtual_list_contents);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				if (each_blocks[i]) {
+    					each_blocks[i].m(svelte_virtual_list_contents, null);
+    				}
+    			}
+
+    			/*svelte_virtual_list_contents_binding*/ ctx[15](svelte_virtual_list_contents);
+    			/*svelte_virtual_list_viewport_binding*/ ctx[16](svelte_virtual_list_viewport);
+    			svelte_virtual_list_viewport_resize_listener = add_iframe_resize_listener(svelte_virtual_list_viewport, /*svelte_virtual_list_viewport_elementresize_handler*/ ctx[17].bind(svelte_virtual_list_viewport));
+    			current = true;
+
+    			if (!mounted) {
+    				dispose = listen_dev(svelte_virtual_list_viewport, "scroll", /*handle_scroll*/ ctx[7], false, false, false, false);
+    				mounted = true;
+    			}
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (dirty & /*$$scope, visible*/ 8208) {
+    				each_value = /*visible*/ ctx[4];
+    				validate_each_argument(each_value);
+    				group_outros();
+    				validate_each_keys(ctx, each_value, get_each_context$3, get_key);
+    				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, svelte_virtual_list_contents, outro_and_destroy_block, create_each_block$3, null, get_each_context$3);
+    				check_outros();
+    			}
+
+    			if (!current || dirty & /*top*/ 32) {
+    				set_style(svelte_virtual_list_contents, "padding-top", /*top*/ ctx[5] + "px");
+    			}
+
+    			if (!current || dirty & /*bottom*/ 64) {
+    				set_style(svelte_virtual_list_contents, "padding-bottom", /*bottom*/ ctx[6] + "px");
+    			}
+
+    			if (!current || dirty & /*height*/ 1) {
+    				set_style(svelte_virtual_list_viewport, "height", /*height*/ ctx[0]);
+    			}
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+
+    			for (let i = 0; i < each_value.length; i += 1) {
+    				transition_in(each_blocks[i]);
+    			}
+
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				transition_out(each_blocks[i]);
+    			}
+
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(svelte_virtual_list_viewport);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].d();
+    			}
+
+    			/*svelte_virtual_list_contents_binding*/ ctx[15](null);
+    			/*svelte_virtual_list_viewport_binding*/ ctx[16](null);
+    			svelte_virtual_list_viewport_resize_listener();
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$4.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    let refreshAction;
+
+    function notifyRefresh() {
+    	refreshAction();
+    }
+
+    function instance$4($$self, $$props, $$invalidate) {
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots('VirtualList', slots, ['default']);
+    	let { items } = $$props;
+    	let { height = '100%' } = $$props;
+    	let { itemHeight = undefined } = $$props;
+    	let foo;
+    	let { start = 0 } = $$props;
+    	let { end = 0 } = $$props;
+
+    	// local state
+    	let height_map = [];
+
+    	let rows;
+    	let viewport;
+    	let contents;
+    	let viewport_height = 0;
+    	let visible;
+    	let mounted;
+    	let top = 0;
+    	let bottom = 0;
+    	let average_height;
+
+    	async function refresh(items, viewport_height, itemHeight) {
+    		const { scrollTop } = viewport;
+    		await tick(); // wait until the DOM is up to date
+    		let content_height = top - scrollTop;
+    		let i = start;
+
+    		while (content_height < viewport_height && i < items.length) {
+    			let row = rows[i - start];
+
+    			if (!row) {
+    				$$invalidate(9, end = i + 1);
+    				await tick(); // render the newly visible row
+    				row = rows[i - start];
+    			}
+
+    			const row_height = height_map[i] = itemHeight || row.offsetHeight;
+    			content_height += row_height;
+    			i += 1;
+    		}
+
+    		$$invalidate(9, end = i);
+    		const remaining = items.length - end;
+    		average_height = (top + content_height) / end;
+    		$$invalidate(6, bottom = remaining * average_height);
+    		height_map.length = items.length;
+    	}
+
+    	async function handle_scroll() {
+    		const { scrollTop } = viewport;
+    		const old_start = start;
+
+    		for (let v = 0; v < rows.length; v += 1) {
+    			height_map[start + v] = itemHeight || rows[v].offsetHeight;
+    		}
+
+    		let i = 0;
+    		let y = 0;
+
+    		while (i < items.length) {
+    			const row_height = height_map[i] || average_height;
+
+    			if (y + row_height > scrollTop) {
+    				$$invalidate(8, start = i);
+    				$$invalidate(5, top = y);
+    				break;
+    			}
+
+    			y += row_height;
+    			i += 1;
+    		}
+
+    		while (i < items.length) {
+    			y += height_map[i] || average_height;
+    			i += 1;
+    			if (y > scrollTop + viewport_height) break;
+    		}
+
+    		$$invalidate(9, end = i);
+    		const remaining = items.length - end;
+    		average_height = y / end;
+    		while (i < items.length) height_map[i++] = average_height;
+    		$$invalidate(6, bottom = remaining * average_height);
+
+    		// prevent jumping if we scrolled up into unknown territory
+    		if (start < old_start) {
+    			await tick();
+    			let expected_height = 0;
+    			let actual_height = 0;
+
+    			for (let i = start; i < old_start; i += 1) {
+    				if (rows[i - start]) {
+    					expected_height += height_map[i];
+    					actual_height += itemHeight || rows[i - start].offsetHeight;
+    				}
+    			}
+
+    			const d = actual_height - expected_height;
+    			viewport.scrollTo(0, scrollTop + d);
+    		}
+    	} // TODO if we overestimated the space these
+    	// rows would occupy we may need to add some
+
+    	// more. maybe we can just call handle_scroll again?
+    	refreshAction = () => refresh(items, viewport_height, itemHeight);
+
+    	// trigger initial refresh
+    	onMount(() => {
+    		rows = contents.getElementsByTagName('svelte-virtual-list-row');
+    		$$invalidate(12, mounted = true);
+    	});
+
+    	$$self.$$.on_mount.push(function () {
+    		if (items === undefined && !('items' in $$props || $$self.$$.bound[$$self.$$.props['items']])) {
+    			console.warn("<VirtualList> was created without expected prop 'items'");
+    		}
+    	});
+
+    	const writable_props = ['items', 'height', 'itemHeight', 'start', 'end'];
+
+    	Object.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<VirtualList> was created with unknown prop '${key}'`);
+    	});
+
+    	function svelte_virtual_list_contents_binding($$value) {
+    		binding_callbacks[$$value ? 'unshift' : 'push'](() => {
+    			contents = $$value;
+    			$$invalidate(3, contents);
+    		});
+    	}
+
+    	function svelte_virtual_list_viewport_binding($$value) {
+    		binding_callbacks[$$value ? 'unshift' : 'push'](() => {
+    			viewport = $$value;
+    			$$invalidate(2, viewport);
+    		});
+    	}
+
+    	function svelte_virtual_list_viewport_elementresize_handler() {
+    		viewport_height = this.offsetHeight;
+    		$$invalidate(1, viewport_height);
+    	}
+
+    	$$self.$$set = $$props => {
+    		if ('items' in $$props) $$invalidate(10, items = $$props.items);
+    		if ('height' in $$props) $$invalidate(0, height = $$props.height);
+    		if ('itemHeight' in $$props) $$invalidate(11, itemHeight = $$props.itemHeight);
+    		if ('start' in $$props) $$invalidate(8, start = $$props.start);
+    		if ('end' in $$props) $$invalidate(9, end = $$props.end);
+    		if ('$$scope' in $$props) $$invalidate(13, $$scope = $$props.$$scope);
+    	};
+
+    	$$self.$capture_state = () => ({
+    		refreshAction,
+    		notifyRefresh,
+    		onMount,
+    		tick,
+    		items,
+    		height,
+    		itemHeight,
+    		foo,
+    		start,
+    		end,
+    		height_map,
+    		rows,
+    		viewport,
+    		contents,
+    		viewport_height,
+    		visible,
+    		mounted,
+    		top,
+    		bottom,
+    		average_height,
+    		refresh,
+    		handle_scroll
+    	});
+
+    	$$self.$inject_state = $$props => {
+    		if ('items' in $$props) $$invalidate(10, items = $$props.items);
+    		if ('height' in $$props) $$invalidate(0, height = $$props.height);
+    		if ('itemHeight' in $$props) $$invalidate(11, itemHeight = $$props.itemHeight);
+    		if ('foo' in $$props) foo = $$props.foo;
+    		if ('start' in $$props) $$invalidate(8, start = $$props.start);
+    		if ('end' in $$props) $$invalidate(9, end = $$props.end);
+    		if ('height_map' in $$props) height_map = $$props.height_map;
+    		if ('rows' in $$props) rows = $$props.rows;
+    		if ('viewport' in $$props) $$invalidate(2, viewport = $$props.viewport);
+    		if ('contents' in $$props) $$invalidate(3, contents = $$props.contents);
+    		if ('viewport_height' in $$props) $$invalidate(1, viewport_height = $$props.viewport_height);
+    		if ('visible' in $$props) $$invalidate(4, visible = $$props.visible);
+    		if ('mounted' in $$props) $$invalidate(12, mounted = $$props.mounted);
+    		if ('top' in $$props) $$invalidate(5, top = $$props.top);
+    		if ('bottom' in $$props) $$invalidate(6, bottom = $$props.bottom);
+    		if ('average_height' in $$props) average_height = $$props.average_height;
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	$$self.$$.update = () => {
+    		if ($$self.$$.dirty & /*items, start, end*/ 1792) {
+    			$$invalidate(4, visible = items.slice(start, end).map((data, i) => {
+    				return { index: i + start, data };
+    			}));
+    		}
+
+    		if ($$self.$$.dirty & /*mounted, items, viewport_height, itemHeight*/ 7170) {
+    			// whenever `items` changes, invalidate the current heightmap
+    			if (mounted) refresh(items, viewport_height, itemHeight);
+    		}
+    	};
+
+    	return [
+    		height,
+    		viewport_height,
+    		viewport,
+    		contents,
+    		visible,
+    		top,
+    		bottom,
+    		handle_scroll,
+    		start,
+    		end,
+    		items,
+    		itemHeight,
+    		mounted,
+    		$$scope,
+    		slots,
+    		svelte_virtual_list_contents_binding,
+    		svelte_virtual_list_viewport_binding,
+    		svelte_virtual_list_viewport_elementresize_handler
+    	];
+    }
+
+    class VirtualList extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+
+    		init(this, options, instance$4, create_fragment$4, safe_not_equal, {
+    			items: 10,
+    			height: 0,
+    			itemHeight: 11,
+    			start: 8,
+    			end: 9
+    		});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "VirtualList",
+    			options,
+    			id: create_fragment$4.name
+    		});
+    	}
+
+    	get items() {
+    		throw new Error("<VirtualList>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set items(value) {
+    		throw new Error("<VirtualList>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get height() {
+    		throw new Error("<VirtualList>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set height(value) {
+    		throw new Error("<VirtualList>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get itemHeight() {
+    		throw new Error("<VirtualList>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set itemHeight(value) {
+    		throw new Error("<VirtualList>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get start() {
+    		throw new Error("<VirtualList>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set start(value) {
+    		throw new Error("<VirtualList>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get end() {
+    		throw new Error("<VirtualList>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set end(value) {
+    		throw new Error("<VirtualList>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+    }
+
+    /* src/collection.svelte generated by Svelte v3.59.2 */
+    const file$3 = "src/collection.svelte";
+
+    function get_each_context$2(ctx, list, i) {
+    	const child_ctx = ctx.slice();
+    	child_ctx[15] = list[i].id;
+    	child_ctx[16] = list[i].offset;
+    	child_ctx[17] = list[i].horizontal;
+    	child_ctx[18] = list[i].imageSrc;
+    	child_ctx[19] = list[i].type;
+    	return child_ctx;
+    }
+
+    // (146:0) {#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}
     function create_if_block_6(ctx) {
     	let div;
     	let t0;
@@ -527,11 +1267,11 @@ var app = (function () {
     			t0 = text("Current Hour: ");
     			t1 = text(/*currentHour*/ ctx[3]);
     			t2 = text(":00");
-    			attr_dev(div, "class", "hour-counter svelte-thsmum");
+    			attr_dev(div, "class", "hour-counter svelte-xvui34");
     			set_style(div, "top", "40%");
     			set_style(div, "z-index", "10");
     			set_style(div, "right", "10%");
-    			add_location(div, file$2, 173, 0, 4877);
+    			add_location(div, file$3, 146, 0, 4060);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -551,43 +1291,37 @@ var app = (function () {
     		block,
     		id: create_if_block_6.name,
     		type: "if",
-    		source: "(173:0) {#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}",
+    		source: "(146:0) {#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (193:26) 
+    // (166:26) 
     function create_if_block_5(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-thsmum");
-    			set_style(div, "position", "absolute");
+    			attr_dev(div, "class", "shape svelte-xvui34");
     			set_style(div, "background-color", "black");
-    			set_style(div, "top", /*offset*/ ctx[17] + "px");
-    			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			set_style(div, "transition", /*transition*/ ctx[21]);
+    			set_style(div, "top", /*offset*/ ctx[16] + "px");
+    			set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 193, 2, 6136);
+    			add_location(div, file$3, 166, 2, 5076);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
     		},
     		p: function update(ctx, dirty) {
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "top", /*offset*/ ctx[17] + "px");
+    				set_style(div, "top", /*offset*/ ctx[16] + "px");
     			}
 
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			}
-
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "transition", /*transition*/ ctx[21]);
+    				set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			}
     		},
     		d: function destroy(detaching) {
@@ -599,43 +1333,37 @@ var app = (function () {
     		block,
     		id: create_if_block_5.name,
     		type: "if",
-    		source: "(193:26) ",
+    		source: "(166:26) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (191:34) 
+    // (164:34) 
     function create_if_block_4(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-thsmum");
-    			set_style(div, "position", "absolute");
+    			attr_dev(div, "class", "shape svelte-xvui34");
     			set_style(div, "background-color", "orange");
-    			set_style(div, "top", /*offset*/ ctx[17] + "px");
-    			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			set_style(div, "transition", /*transition*/ ctx[21]);
+    			set_style(div, "top", /*offset*/ ctx[16] + "px");
+    			set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 191, 2, 5946);
+    			add_location(div, file$3, 164, 2, 4932);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
     		},
     		p: function update(ctx, dirty) {
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "top", /*offset*/ ctx[17] + "px");
+    				set_style(div, "top", /*offset*/ ctx[16] + "px");
     			}
 
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			}
-
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "transition", /*transition*/ ctx[21]);
+    				set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			}
     		},
     		d: function destroy(detaching) {
@@ -647,43 +1375,37 @@ var app = (function () {
     		block,
     		id: create_if_block_4.name,
     		type: "if",
-    		source: "(191:34) ",
+    		source: "(164:34) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (189:31) 
+    // (162:31) 
     function create_if_block_3(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-thsmum");
-    			set_style(div, "position", "absolute");
+    			attr_dev(div, "class", "shape svelte-xvui34");
     			set_style(div, "background-color", "yellow");
-    			set_style(div, "top", /*offset*/ ctx[17] + "px");
-    			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			set_style(div, "transition", /*transition*/ ctx[21]);
+    			set_style(div, "top", /*offset*/ ctx[16] + "px");
+    			set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 189, 2, 5748);
+    			add_location(div, file$3, 162, 2, 4780);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
     		},
     		p: function update(ctx, dirty) {
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "top", /*offset*/ ctx[17] + "px");
+    				set_style(div, "top", /*offset*/ ctx[16] + "px");
     			}
 
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			}
-
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "transition", /*transition*/ ctx[21]);
+    				set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			}
     		},
     		d: function destroy(detaching) {
@@ -695,43 +1417,37 @@ var app = (function () {
     		block,
     		id: create_if_block_3.name,
     		type: "if",
-    		source: "(189:31) ",
+    		source: "(162:31) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (187:31) 
+    // (160:31) 
     function create_if_block_2(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-thsmum");
-    			set_style(div, "position", "absolute");
+    			attr_dev(div, "class", "shape svelte-xvui34");
     			set_style(div, "background-color", "purple");
-    			set_style(div, "top", /*offset*/ ctx[17] + "px");
-    			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			set_style(div, "transition", /*transition*/ ctx[21]);
+    			set_style(div, "top", /*offset*/ ctx[16] + "px");
+    			set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 187, 2, 5553);
+    			add_location(div, file$3, 160, 2, 4631);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
     		},
     		p: function update(ctx, dirty) {
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "top", /*offset*/ ctx[17] + "px");
+    				set_style(div, "top", /*offset*/ ctx[16] + "px");
     			}
 
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			}
-
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "transition", /*transition*/ ctx[21]);
+    				set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			}
     		},
     		d: function destroy(detaching) {
@@ -743,43 +1459,37 @@ var app = (function () {
     		block,
     		id: create_if_block_2.name,
     		type: "if",
-    		source: "(187:31) ",
+    		source: "(160:31) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (185:34) 
+    // (158:34) 
     function create_if_block_1(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-thsmum");
-    			set_style(div, "position", "absolute");
+    			attr_dev(div, "class", "shape svelte-xvui34");
     			set_style(div, "background-color", "green");
-    			set_style(div, "top", /*offset*/ ctx[17] + "px");
-    			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			set_style(div, "transition", /*transition*/ ctx[21]);
+    			set_style(div, "top", /*offset*/ ctx[16] + "px");
+    			set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 185, 2, 5359);
+    			add_location(div, file$3, 158, 2, 4483);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
     		},
     		p: function update(ctx, dirty) {
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "top", /*offset*/ ctx[17] + "px");
+    				set_style(div, "top", /*offset*/ ctx[16] + "px");
     			}
 
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			}
-
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "transition", /*transition*/ ctx[21]);
+    				set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			}
     		},
     		d: function destroy(detaching) {
@@ -791,43 +1501,37 @@ var app = (function () {
     		block,
     		id: create_if_block_1.name,
     		type: "if",
-    		source: "(185:34) ",
+    		source: "(158:34) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (183:1) {#if type === 'waterbottle'}
+    // (156:1) {#if type === 'waterbottle'}
     function create_if_block(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-thsmum");
-    			set_style(div, "position", "absolute");
+    			attr_dev(div, "class", "shape svelte-xvui34");
     			set_style(div, "background-color", "blue");
-    			set_style(div, "top", /*offset*/ ctx[17] + "px");
-    			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			set_style(div, "transition", /*transition*/ ctx[21]);
+    			set_style(div, "top", /*offset*/ ctx[16] + "px");
+    			set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 183, 2, 5164);
+    			add_location(div, file$3, 156, 2, 4334);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
     		},
     		p: function update(ctx, dirty) {
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "top", /*offset*/ ctx[17] + "px");
+    				set_style(div, "top", /*offset*/ ctx[16] + "px");
     			}
 
     			if (dirty & /*objects*/ 1) {
-    				set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			}
-
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "transition", /*transition*/ ctx[21]);
+    				set_style(div, "left", /*horizontal*/ ctx[17] + "px");
     			}
     		},
     		d: function destroy(detaching) {
@@ -839,24 +1543,24 @@ var app = (function () {
     		block,
     		id: create_if_block.name,
     		type: "if",
-    		source: "(183:1) {#if type === 'waterbottle'}",
+    		source: "(156:1) {#if type === 'waterbottle'}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (182:1) {#each objects as { id, offset, horizontal, imageSrc, type, transition}}
-    function create_each_block$1(ctx) {
+    // (155:1) {#each objects as { id, offset, horizontal, imageSrc, type}}
+    function create_each_block$2(ctx) {
     	let if_block_anchor;
 
     	function select_block_type(ctx, dirty) {
-    		if (/*type*/ ctx[20] === 'waterbottle') return create_if_block;
-    		if (/*type*/ ctx[20] === 'plasticbags') return create_if_block_1;
-    		if (/*type*/ ctx[20] === 'plastics') return create_if_block_2;
-    		if (/*type*/ ctx[20] === 'wrappers') return create_if_block_3;
-    		if (/*type*/ ctx[20] === 'sportsballs') return create_if_block_4;
-    		if (/*type*/ ctx[20] === 'cig') return create_if_block_5;
+    		if (/*type*/ ctx[19] === 'waterbottle') return create_if_block;
+    		if (/*type*/ ctx[19] === 'plasticbags') return create_if_block_1;
+    		if (/*type*/ ctx[19] === 'plastics') return create_if_block_2;
+    		if (/*type*/ ctx[19] === 'wrappers') return create_if_block_3;
+    		if (/*type*/ ctx[19] === 'sportsballs') return create_if_block_4;
+    		if (/*type*/ ctx[19] === 'cig') return create_if_block_5;
     	}
 
     	let current_block_type = select_block_type(ctx);
@@ -895,16 +1599,16 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_each_block$1.name,
+    		id: create_each_block$2.name,
     		type: "each",
-    		source: "(182:1) {#each objects as { id, offset, horizontal, imageSrc, type, transition}}",
+    		source: "(155:1) {#each objects as { id, offset, horizontal, imageSrc, type}}",
     		ctx
     	});
 
     	return block;
     }
 
-    function create_fragment$2(ctx) {
+    function create_fragment$3(ctx) {
     	let t0;
     	let div0;
     	let t1;
@@ -917,7 +1621,7 @@ var app = (function () {
     	let each_blocks = [];
 
     	for (let i = 0; i < each_value.length; i += 1) {
-    		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
+    		each_blocks[i] = create_each_block$2(get_each_context$2(ctx, each_value, i));
     	}
 
     	const block = {
@@ -934,12 +1638,12 @@ var app = (function () {
 
     			t2 = space();
     			div2 = element("div");
-    			attr_dev(div0, "class", "center-square svelte-thsmum");
-    			add_location(div0, file$2, 179, 0, 4994);
-    			attr_dev(div1, "class", "trash-wrapper svelte-thsmum");
-    			add_location(div1, file$2, 180, 0, 5029);
-    			set_style(div2, "height", "30000px");
-    			add_location(div2, file$2, 198, 0, 6320);
+    			attr_dev(div0, "class", "center-square svelte-xvui34");
+    			add_location(div0, file$3, 151, 0, 4176);
+    			attr_dev(div1, "class", "trash-wrapper svelte-xvui34");
+    			add_location(div1, file$3, 153, 0, 4211);
+    			set_style(div2, "height", /*maxInitialOffset*/ ctx[2] + "px");
+    			add_location(div2, file$3, 171, 0, 5214);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -980,12 +1684,12 @@ var app = (function () {
     				let i;
 
     				for (i = 0; i < each_value.length; i += 1) {
-    					const child_ctx = get_each_context$1(ctx, each_value, i);
+    					const child_ctx = get_each_context$2(ctx, each_value, i);
 
     					if (each_blocks[i]) {
     						each_blocks[i].p(child_ctx, dirty);
     					} else {
-    						each_blocks[i] = create_each_block$1(child_ctx);
+    						each_blocks[i] = create_each_block$2(child_ctx);
     						each_blocks[i].c();
     						each_blocks[i].m(div1, null);
     					}
@@ -996,6 +1700,10 @@ var app = (function () {
     				}
 
     				each_blocks.length = each_value.length;
+    			}
+
+    			if (dirty & /*maxInitialOffset*/ 4) {
+    				set_style(div2, "height", /*maxInitialOffset*/ ctx[2] + "px");
     			}
     		},
     		i: noop,
@@ -1014,7 +1722,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$2.name,
+    		id: create_fragment$3.name,
     		type: "component",
     		source: "",
     		ctx
@@ -1023,9 +1731,9 @@ var app = (function () {
     	return block;
     }
 
-    function instance$2($$self, $$props, $$invalidate) {
+    function instance$3($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
-    	validate_slots('Boat', slots, []);
+    	validate_slots('Collection', slots, []);
     	let objects = [];
     	let windowHeight = 0;
     	let windowWidth = 0;
@@ -1085,7 +1793,6 @@ var app = (function () {
     		windowWidth = window.innerWidth;
     		initialScrollY = window.scrollY;
     		initObjects();
-    		calculateGridPositions();
 
     		function throttle(fn, wait) {
     			let last = 0;
@@ -1107,25 +1814,6 @@ var app = (function () {
     		};
     	});
 
-    	function calculateGridPositions() {
-    		let yStart = windowHeight + windowHeight * 3; // Starting below the viewport height
-    		let xStart = 0;
-
-    		objectConfigs.forEach(config => {
-    			let index = 0;
-
-    			objects.filter(obj => obj.type === config.type).forEach(obj => {
-    				let row = Math.floor(index / columns);
-    				let col = index % columns;
-    				obj.finalX = xStart + col * cellWidth;
-    				obj.finalY = yStart + row * cellHeight;
-    				index++;
-    			});
-
-    			yStart += (Math.ceil(config.number / columns) + 1) * cellHeight; // Move to next block
-    		});
-    	}
-
     	function initObjects() {
     		$$invalidate(1, minInitialOffset = windowHeight * 22);
     		$$invalidate(2, maxInitialOffset = windowHeight * 40);
@@ -1136,11 +1824,11 @@ var app = (function () {
 
     				if (i < 1 & config.type === 'waterbottle') {
     					// Assuming you want the first two objects of each type to appear earlier
-    					earlyAppearanceOffset = windowHeight * 12; // Smaller offset for earlier appearance
+    					earlyAppearanceOffset = windowHeight * 11.9; // Smaller offset for earlier appearance
     				} else if (i < 1 & config.type === 'cig') {
-    					earlyAppearanceOffset = windowHeight * 14.5; // Smaller offset for earlier appearance
+    					earlyAppearanceOffset = windowHeight * 14.9; // Smaller offset for earlier appearance
     				} else if (i < 1 & (config.type === 'wrappers' | config.type === 'plastics' | config.type === 'glassbottles' | config.type === 'sportsballs' | config.type === 'plasticbags')) {
-    					earlyAppearanceOffset = windowHeight * 17.7; // Smaller offset for earlier appearance
+    					earlyAppearanceOffset = windowHeight * 17.9; // Smaller offset for earlier appearance
     				} else {
     					earlyAppearanceOffset = minInitialOffset + Math.random() * (maxInitialOffset - minInitialOffset);
     				}
@@ -1163,40 +1851,29 @@ var app = (function () {
     		const scrollY = window.scrollY;
     		$$invalidate(3, currentHour = Math.floor((scrollY - minInitialOffset) / (maxInitialOffset - minInitialOffset) * 24) % 24);
 
-    		if (scrollY >= maxInitialOffset + windowHeight) {
-    			// Move shapes to their final grid positions
-    			$$invalidate(0, objects = objects.map(obj => ({
-    				...obj,
-    				horizontal: obj.finalX,
-    				offset: obj.finalY,
-    				transition: "left 3s, top 3s",
-    				position: "sticky"
-    			})));
-    		} else {
-    			// Normal scroll behavior
-    			$$invalidate(0, objects = objects.map(obj => {
-    				let newOffset = obj.initialOffset - scrollY;
+    		// Normal scroll behavior
+    		$$invalidate(0, objects = objects.map(obj => {
+    			let newOffset = obj.initialOffset - scrollY;
 
-    				return {
-    					...obj,
-    					horizontal: obj.originalHorizontal,
-    					offset: newOffset <= squareBounds.top
-    					? squareBounds.top
-    					: newOffset,
-    					transition: "none"
-    				};
-    			}));
-    		}
+    			return {
+    				...obj,
+    				horizontal: obj.originalHorizontal,
+    				offset: newOffset <= squareBounds.top
+    				? squareBounds.top
+    				: newOffset
+    			};
+    		}));
     	}
 
     	const writable_props = [];
 
     	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Boat> was created with unknown prop '${key}'`);
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Collection> was created with unknown prop '${key}'`);
     	});
 
     	$$self.$capture_state = () => ({
     		onMount,
+    		VirtualList,
     		objects,
     		windowHeight,
     		windowWidth,
@@ -1210,7 +1887,6 @@ var app = (function () {
     		columns,
     		cellWidth,
     		cellHeight,
-    		calculateGridPositions,
     		initObjects,
     		handleScroll
     	});
@@ -1237,24 +1913,24 @@ var app = (function () {
     	return [objects, minInitialOffset, maxInitialOffset, currentHour, zIndex];
     }
 
-    class Boat extends SvelteComponentDev {
+    class Collection extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$2, create_fragment$2, safe_not_equal, {});
+    		init(this, options, instance$3, create_fragment$3, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
-    			tagName: "Boat",
+    			tagName: "Collection",
     			options,
-    			id: create_fragment$2.name
+    			id: create_fragment$3.name
     		});
     	}
     }
 
     /* src/Scrolly.svelte generated by Svelte v3.59.2 */
-    const file$1 = "src/Scrolly.svelte";
+    const file$2 = "src/Scrolly.svelte";
 
-    function create_fragment$1(ctx) {
+    function create_fragment$2(ctx) {
     	let div;
     	let current;
     	const default_slot_template = /*#slots*/ ctx[7].default;
@@ -1264,7 +1940,7 @@ var app = (function () {
     		c: function create() {
     			div = element("div");
     			if (default_slot) default_slot.c();
-    			add_location(div, file$1, 81, 2, 2147);
+    			add_location(div, file$2, 81, 2, 2147);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -1313,7 +1989,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$1.name,
+    		id: create_fragment$2.name,
     		type: "component",
     		source: "",
     		ctx
@@ -1322,7 +1998,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$1($$self, $$props, $$invalidate) {
+    function instance$2($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Scrolly', slots, ['default']);
     	let { root = null } = $$props;
@@ -1449,7 +2125,7 @@ var app = (function () {
     	constructor(options) {
     		super(options);
 
-    		init(this, options, instance$1, create_fragment$1, safe_not_equal, {
+    		init(this, options, instance$2, create_fragment$2, safe_not_equal, {
     			root: 2,
     			top: 3,
     			bottom: 4,
@@ -1461,7 +2137,7 @@ var app = (function () {
     			component: this,
     			tagName: "Scrolly",
     			options,
-    			id: create_fragment$1.name
+    			id: create_fragment$2.name
     		});
     	}
 
@@ -1506,6 +2182,302 @@ var app = (function () {
     	}
     }
 
+    /* src/analysis.svelte generated by Svelte v3.59.2 */
+
+    const { console: console_1 } = globals;
+    const file$1 = "src/analysis.svelte";
+
+    function get_each_context$1(ctx, list, i) {
+    	const child_ctx = ctx.slice();
+    	child_ctx[12] = list[i];
+    	return child_ctx;
+    }
+
+    // (85:4) {#each objects as i}
+    function create_each_block$1(ctx) {
+    	let div;
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+    			attr_dev(div, "class", "shape svelte-1o80dgg");
+    			set_style(div, "left", /*i*/ ctx[12].finalX);
+    			set_style(div, "top", /*i*/ ctx[12].finalY);
+    			set_style(div, "background-color", /*i*/ ctx[12].color);
+    			add_location(div, file$1, 86, 8, 2160);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+    		},
+    		p: function update(ctx, dirty) {
+    			if (dirty & /*objects*/ 1) {
+    				set_style(div, "left", /*i*/ ctx[12].finalX);
+    			}
+
+    			if (dirty & /*objects*/ 1) {
+    				set_style(div, "top", /*i*/ ctx[12].finalY);
+    			}
+
+    			if (dirty & /*objects*/ 1) {
+    				set_style(div, "background-color", /*i*/ ctx[12].color);
+    			}
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_each_block$1.name,
+    		type: "each",
+    		source: "(85:4) {#each objects as i}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$1(ctx) {
+    	let div0;
+    	let h1;
+    	let t1;
+    	let div1;
+    	let div1_resize_listener;
+    	let each_value = /*objects*/ ctx[0];
+    	validate_each_argument(each_value);
+    	let each_blocks = [];
+
+    	for (let i = 0; i < each_value.length; i += 1) {
+    		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
+    	}
+
+    	const block = {
+    		c: function create() {
+    			div0 = element("div");
+    			h1 = element("h1");
+    			h1.textContent = "hey";
+    			t1 = space();
+    			div1 = element("div");
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].c();
+    			}
+
+    			add_location(h1, file$1, 78, 5, 2000);
+    			add_location(div0, file$1, 78, 0, 1995);
+    			attr_dev(div1, "class", "chart-container svelte-1o80dgg");
+    			add_render_callback(() => /*div1_elementresize_handler*/ ctx[3].call(div1));
+    			add_location(div1, file$1, 79, 0, 2019);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div0, anchor);
+    			append_dev(div0, h1);
+    			insert_dev(target, t1, anchor);
+    			insert_dev(target, div1, anchor);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				if (each_blocks[i]) {
+    					each_blocks[i].m(div1, null);
+    				}
+    			}
+
+    			div1_resize_listener = add_iframe_resize_listener(div1, /*div1_elementresize_handler*/ ctx[3].bind(div1));
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (dirty & /*objects*/ 1) {
+    				each_value = /*objects*/ ctx[0];
+    				validate_each_argument(each_value);
+    				let i;
+
+    				for (i = 0; i < each_value.length; i += 1) {
+    					const child_ctx = get_each_context$1(ctx, each_value, i);
+
+    					if (each_blocks[i]) {
+    						each_blocks[i].p(child_ctx, dirty);
+    					} else {
+    						each_blocks[i] = create_each_block$1(child_ctx);
+    						each_blocks[i].c();
+    						each_blocks[i].m(div1, null);
+    					}
+    				}
+
+    				for (; i < each_blocks.length; i += 1) {
+    					each_blocks[i].d(1);
+    				}
+
+    				each_blocks.length = each_value.length;
+    			}
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div0);
+    			if (detaching) detach_dev(t1);
+    			if (detaching) detach_dev(div1);
+    			destroy_each(each_blocks, detaching);
+    			div1_resize_listener();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$1.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$1($$self, $$props, $$invalidate) {
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots('Analysis', slots, []);
+    	let objects = [];
+    	let windowHeight = 0;
+    	let width;
+    	let height;
+    	const margin = { top: 10, bottom: 10, left: 10, right: 10 };
+
+    	const objectConfigs = [
+    		{
+    			type: 'waterbottle',
+    			number: 1981,
+    			color: 'blue'
+    		},
+    		{
+    			type: 'cig',
+    			number: 18656,
+    			color: 'black'
+    		},
+    		{
+    			type: 'plasticbags',
+    			number: 867,
+    			color: 'green'
+    		},
+    		{
+    			type: 'plastics',
+    			number: 1462,
+    			color: 'purple'
+    		},
+    		{
+    			type: 'glassbottles',
+    			number: 21,
+    			color: 'grey'
+    		},
+    		{
+    			type: 'wrappers',
+    			number: 1427,
+    			color: 'yellow'
+    		},
+    		{
+    			type: 'sportsballs',
+    			number: 867,
+    			color: 'orange'
+    		}
+    	];
+
+    	let columns = 200;
+    	let cellWidth = 10;
+    	let cellHeight = 10;
+
+    	onMount(() => {
+    		initObjects();
+    	});
+
+    	function initObjects() {
+    		$$invalidate(0, objects = objectConfigs.flatMap(config => {
+    			return Array.from({ length: config.number }, (_, i) => {
+    				return { type: config.type, color: config.color };
+    			});
+    		}));
+
+    		calculateGridPositions();
+    		console.log(objects);
+    	}
+
+    	function calculateGridPositions() {
+    		let yStart = windowHeight + 50; // Starting below the viewport height
+    		let xStart = 10;
+
+    		objectConfigs.forEach(config => {
+    			let index = 0;
+
+    			objects.filter(obj => obj.type === config.type).forEach(obj => {
+    				let row = Math.floor(index / columns);
+    				let col = index % columns;
+    				obj.finalX = xStart + col * cellWidth;
+    				obj.finalY = yStart + row * cellHeight;
+    				index++;
+    			});
+
+    			yStart += (Math.ceil(config.number / columns) + 1) * cellHeight; // Move to next block
+    		});
+    	}
+
+    	const writable_props = [];
+
+    	Object.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1.warn(`<Analysis> was created with unknown prop '${key}'`);
+    	});
+
+    	function div1_elementresize_handler() {
+    		width = this.offsetWidth;
+    		height = this.offsetHeight;
+    		$$invalidate(1, width);
+    		$$invalidate(2, height);
+    	}
+
+    	$$self.$capture_state = () => ({
+    		onMount,
+    		objects,
+    		windowHeight,
+    		width,
+    		height,
+    		margin,
+    		objectConfigs,
+    		columns,
+    		cellWidth,
+    		cellHeight,
+    		initObjects,
+    		calculateGridPositions
+    	});
+
+    	$$self.$inject_state = $$props => {
+    		if ('objects' in $$props) $$invalidate(0, objects = $$props.objects);
+    		if ('windowHeight' in $$props) windowHeight = $$props.windowHeight;
+    		if ('width' in $$props) $$invalidate(1, width = $$props.width);
+    		if ('height' in $$props) $$invalidate(2, height = $$props.height);
+    		if ('columns' in $$props) columns = $$props.columns;
+    		if ('cellWidth' in $$props) cellWidth = $$props.cellWidth;
+    		if ('cellHeight' in $$props) cellHeight = $$props.cellHeight;
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	return [objects, width, height, div1_elementresize_handler];
+    }
+
+    class Analysis extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init(this, options, instance$1, create_fragment$1, safe_not_equal, {});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "Analysis",
+    			options,
+    			id: create_fragment$1.name
+    		});
+    	}
+    }
+
     /* src/App.svelte generated by Svelte v3.59.2 */
     const file = "src/App.svelte";
 
@@ -1516,7 +2488,7 @@ var app = (function () {
     	return child_ctx;
     }
 
-    // (124:3) {#each steps as text, i}
+    // (122:3) {#each steps as text, i}
     function create_each_block(ctx) {
     	let div1;
     	let div0;
@@ -1526,11 +2498,11 @@ var app = (function () {
     		c: function create() {
     			div1 = element("div");
     			div0 = element("div");
-    			attr_dev(div0, "class", "step-content svelte-t4ugqa");
-    			add_location(div0, file, 125, 4, 2830);
-    			attr_dev(div1, "class", "step svelte-t4ugqa");
-    			toggle_class(div1, "active", /*value*/ ctx[1] === /*i*/ ctx[7]);
-    			add_location(div1, file, 124, 5, 2780);
+    			attr_dev(div0, "class", "step-content svelte-1ag2h2p");
+    			add_location(div0, file, 123, 4, 3238);
+    			attr_dev(div1, "class", "step svelte-1ag2h2p");
+    			toggle_class(div1, "active", /*value*/ ctx[0] === /*i*/ ctx[7]);
+    			add_location(div1, file, 122, 5, 3188);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div1, anchor);
@@ -1538,8 +2510,8 @@ var app = (function () {
     			div0.innerHTML = raw_value;
     		},
     		p: function update(ctx, dirty) {
-    			if (dirty & /*value*/ 2) {
-    				toggle_class(div1, "active", /*value*/ ctx[1] === /*i*/ ctx[7]);
+    			if (dirty & /*value*/ 1) {
+    				toggle_class(div1, "active", /*value*/ ctx[0] === /*i*/ ctx[7]);
     			}
     		},
     		d: function destroy(detaching) {
@@ -1551,18 +2523,18 @@ var app = (function () {
     		block,
     		id: create_each_block.name,
     		type: "each",
-    		source: "(124:3) {#each steps as text, i}",
+    		source: "(122:3) {#each steps as text, i}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (123:4) <Scrolly bind:value>
+    // (121:4) <Scrolly bind:value>
     function create_default_slot(ctx) {
     	let t;
     	let div;
-    	let each_value = /*steps*/ ctx[2];
+    	let each_value = /*steps*/ ctx[1];
     	validate_each_argument(each_value);
     	let each_blocks = [];
 
@@ -1578,8 +2550,8 @@ var app = (function () {
 
     			t = space();
     			div = element("div");
-    			attr_dev(div, "class", "spacer svelte-t4ugqa");
-    			add_location(div, file, 128, 3, 2901);
+    			attr_dev(div, "class", "spacer svelte-1ag2h2p");
+    			add_location(div, file, 126, 3, 3309);
     		},
     		m: function mount(target, anchor) {
     			for (let i = 0; i < each_blocks.length; i += 1) {
@@ -1592,8 +2564,8 @@ var app = (function () {
     			insert_dev(target, div, anchor);
     		},
     		p: function update(ctx, dirty) {
-    			if (dirty & /*value, steps*/ 6) {
-    				each_value = /*steps*/ ctx[2];
+    			if (dirty & /*value, steps*/ 3) {
+    				each_value = /*steps*/ ctx[1];
     				validate_each_argument(each_value);
     				let i;
 
@@ -1627,7 +2599,7 @@ var app = (function () {
     		block,
     		id: create_default_slot.name,
     		type: "slot",
-    		source: "(123:4) <Scrolly bind:value>",
+    		source: "(121:4) <Scrolly bind:value>",
     		ctx
     	});
 
@@ -1636,85 +2608,36 @@ var app = (function () {
 
     function create_fragment(ctx) {
     	let article;
-    	let section0;
-    	let h20;
+    	let section;
+    	let h1;
     	let t1;
+    	let br;
+    	let t2;
     	let p0;
-    	let t3;
+    	let t4;
     	let p1;
     	let t5;
+    	let a0;
+    	let t7;
+    	let a1;
+    	let t9;
+    	let t10;
     	let div0;
-    	let t6;
+    	let t11;
     	let div3;
     	let div1;
     	let scrolly;
     	let updating_value;
-    	let t7;
+    	let t12;
     	let div2;
     	let visualization;
-    	let t8;
-    	let div4;
-    	let t9;
-    	let section1;
-    	let h21;
-    	let t11;
-    	let p2;
     	let t13;
-    	let p3;
-    	let t15;
-    	let br0;
-    	let t16;
-    	let br1;
-    	let t17;
-    	let br2;
-    	let t18;
-    	let br3;
-    	let t19;
-    	let br4;
-    	let t20;
-    	let br5;
-    	let t21;
-    	let br6;
-    	let t22;
-    	let br7;
-    	let t23;
-    	let br8;
-    	let t24;
-    	let br9;
-    	let t25;
-    	let br10;
-    	let t26;
-    	let br11;
-    	let t27;
-    	let br12;
-    	let t28;
-    	let br13;
-    	let t29;
-    	let br14;
-    	let t30;
-    	let br15;
-    	let t31;
-    	let br16;
-    	let t32;
-    	let br17;
-    	let t33;
-    	let br18;
-    	let t34;
-    	let br19;
-    	let t35;
-    	let br20;
-    	let t36;
-    	let br21;
-    	let t37;
-    	let br22;
-    	let t38;
-    	let br23;
-    	let t39;
-    	let br24;
+    	let div4;
+    	let analysis;
     	let current;
 
     	function scrolly_value_binding(value) {
-    		/*scrolly_value_binding*/ ctx[3](value);
+    		/*scrolly_value_binding*/ ctx[2](value);
     	}
 
     	let scrolly_props = {
@@ -1722,260 +2645,136 @@ var app = (function () {
     		$$scope: { ctx }
     	};
 
-    	if (/*value*/ ctx[1] !== void 0) {
-    		scrolly_props.value = /*value*/ ctx[1];
+    	if (/*value*/ ctx[0] !== void 0) {
+    		scrolly_props.value = /*value*/ ctx[0];
     	}
 
     	scrolly = new Scrolly({ props: scrolly_props, $$inline: true });
     	binding_callbacks.push(() => bind(scrolly, 'value', scrolly_value_binding));
-    	visualization = new Boat({ $$inline: true });
+    	visualization = new Collection({ $$inline: true });
+    	analysis = new Analysis({ $$inline: true });
 
     	const block = {
     		c: function create() {
     			article = element("article");
-    			section0 = element("section");
-    			h20 = element("h2");
-    			h20.textContent = "Garbage In, Garbage Out";
+    			section = element("section");
+    			h1 = element("h1");
+    			h1.textContent = "Garbage In, Garbage Out";
     			t1 = space();
+    			br = element("br");
+    			t2 = space();
     			p0 = element("p");
     			p0.textContent = "Society makes a lot of trash. We're not quite sure what to do with it.";
-    			t3 = space();
+    			t4 = space();
     			p1 = element("p");
-    			p1.textContent = "Anthropomorphizing might help.";
-    			t5 = space();
+    			t5 = text("Anthropomorphizing might help. Powered by data from ");
+    			a0 = element("a");
+    			a0.textContent = "www.mrtrashwheel.com";
+    			t7 = text(", and thanks to ");
+    			a1 = element("a");
+    			a1.textContent = "#tidytuesday";
+    			t9 = text(" for the idea.");
+    			t10 = space();
     			div0 = element("div");
-    			t6 = space();
+    			t11 = space();
     			div3 = element("div");
     			div1 = element("div");
     			create_component(scrolly.$$.fragment);
-    			t7 = space();
+    			t12 = space();
     			div2 = element("div");
     			create_component(visualization.$$.fragment);
-    			t8 = space();
-    			div4 = element("div");
-    			t9 = space();
-    			section1 = element("section");
-    			h21 = element("h2");
-    			h21.textContent = "Conclusions Drawn from the Visualization";
-    			t11 = space();
-    			p2 = element("p");
-    			p2.textContent = "As we reflect on the visualization that has scrolled out of view, let's discuss the insights gathered. The movement and aggregation of circles within the defined area highlight the clustering tendency of data under certain conditions.";
     			t13 = space();
-    			p3 = element("p");
-    			p3.textContent = "This visualization is not just a showcase of technical prowess but serves as a metaphor for the dynamic and sometimes unpredictable nature of data analysis. Understanding these patterns allows us to anticipate changes and adapt strategies effectively.";
-    			t15 = space();
-    			br0 = element("br");
-    			t16 = space();
-    			br1 = element("br");
-    			t17 = space();
-    			br2 = element("br");
-    			t18 = space();
-    			br3 = element("br");
-    			t19 = space();
-    			br4 = element("br");
-    			t20 = space();
-    			br5 = element("br");
-    			t21 = space();
-    			br6 = element("br");
-    			t22 = space();
-    			br7 = element("br");
-    			t23 = space();
-    			br8 = element("br");
-    			t24 = space();
-    			br9 = element("br");
-    			t25 = space();
-    			br10 = element("br");
-    			t26 = space();
-    			br11 = element("br");
-    			t27 = space();
-    			br12 = element("br");
-    			t28 = space();
-    			br13 = element("br");
-    			t29 = space();
-    			br14 = element("br");
-    			t30 = space();
-    			br15 = element("br");
-    			t31 = space();
-    			br16 = element("br");
-    			t32 = space();
-    			br17 = element("br");
-    			t33 = space();
-    			br18 = element("br");
-    			t34 = space();
-    			br19 = element("br");
-    			t35 = space();
-    			br20 = element("br");
-    			t36 = space();
-    			br21 = element("br");
-    			t37 = space();
-    			br22 = element("br");
-    			t38 = space();
-    			br23 = element("br");
-    			t39 = space();
-    			br24 = element("br");
-    			add_location(h20, file, 113, 3, 2400);
-    			add_location(p0, file, 114, 3, 2436);
-    			add_location(p1, file, 115, 3, 2517);
-    			attr_dev(section0, "class", "article-section svelte-t4ugqa");
-    			add_location(section0, file, 112, 1, 2363);
-    			attr_dev(div0, "class", "spacer svelte-t4ugqa");
-    			add_location(div0, file, 119, 1, 2630);
-    			attr_dev(div1, "class", "steps-container svelte-t4ugqa");
-    			add_location(div1, file, 121, 2, 2692);
-    			attr_dev(div2, "class", "sticky svelte-t4ugqa");
-    			add_location(div2, file, 131, 2, 2950);
-    			attr_dev(div3, "class", "section-container svelte-t4ugqa");
-    			add_location(div3, file, 120, 1, 2658);
-    			attr_dev(div4, "class", "spacer svelte-t4ugqa");
-    			add_location(div4, file, 137, 1, 3096);
-    			add_location(h21, file, 140, 3, 3239);
-    			add_location(p2, file, 141, 3, 3292);
-    			add_location(p3, file, 142, 3, 3537);
-    			add_location(br0, file, 143, 3, 3799);
-    			add_location(br1, file, 144, 3, 3807);
-    			add_location(br2, file, 145, 3, 3815);
-    			add_location(br3, file, 146, 3, 3823);
-    			add_location(br4, file, 147, 3, 3831);
-    			add_location(br5, file, 148, 3, 3839);
-    			add_location(br6, file, 149, 3, 3847);
-    			add_location(br7, file, 150, 3, 3855);
-    			add_location(br8, file, 151, 3, 3863);
-    			add_location(br9, file, 152, 3, 3871);
-    			add_location(br10, file, 153, 3, 3879);
-    			add_location(br11, file, 154, 3, 3887);
-    			add_location(br12, file, 155, 3, 3895);
-    			add_location(br13, file, 156, 3, 3903);
-    			add_location(br14, file, 157, 3, 3911);
-    			add_location(br15, file, 158, 3, 3919);
-    			add_location(br16, file, 159, 3, 3927);
-    			add_location(br17, file, 160, 3, 3935);
-    			add_location(br18, file, 161, 3, 3943);
-    			add_location(br19, file, 162, 3, 3951);
-    			add_location(br20, file, 163, 3, 3959);
-    			add_location(br21, file, 164, 3, 3967);
-    			add_location(br22, file, 165, 3, 3975);
-    			add_location(br23, file, 166, 3, 3983);
-    			add_location(br24, file, 167, 3, 3991);
-    			attr_dev(section1, "class", "article-section conclusion svelte-t4ugqa");
-    			set_style(section1, "visibility", /*conclusionVisible*/ ctx[0] ? 'visible' : 'hidden');
-    			add_location(section1, file, 139, 1, 3127);
-    			add_location(article, file, 111, 2, 2352);
+    			div4 = element("div");
+    			create_component(analysis.$$.fragment);
+    			add_location(h1, file, 110, 3, 2596);
+    			add_location(br, file, 111, 3, 2632);
+    			add_location(p0, file, 112, 3, 2640);
+    			attr_dev(a0, "href", "https://www.mrtrashwheel.com/");
+    			add_location(a0, file, 113, 58, 2776);
+    			attr_dev(a1, "href", "https://github.com/rfordatascience/tidytuesday/tree/master");
+    			add_location(a1, file, 113, 140, 2858);
+    			add_location(p1, file, 113, 3, 2721);
+    			attr_dev(section, "class", "article-section svelte-1ag2h2p");
+    			set_style(section, "text-align", "center");
+    			add_location(section, file, 109, 1, 2531);
+    			attr_dev(div0, "class", "spacer svelte-1ag2h2p");
+    			add_location(div0, file, 117, 1, 3038);
+    			attr_dev(div1, "class", "steps-container svelte-1ag2h2p");
+    			add_location(div1, file, 119, 2, 3100);
+    			attr_dev(div2, "class", "sticky svelte-1ag2h2p");
+    			add_location(div2, file, 129, 2, 3358);
+    			attr_dev(div3, "class", "section-container svelte-1ag2h2p");
+    			add_location(div3, file, 118, 1, 3066);
+    			set_style(div4, "position", "sticky");
+    			add_location(div4, file, 133, 1, 3420);
+    			attr_dev(article, "class", "article svelte-1ag2h2p");
+    			add_location(article, file, 108, 2, 2504);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, article, anchor);
-    			append_dev(article, section0);
-    			append_dev(section0, h20);
-    			append_dev(section0, t1);
-    			append_dev(section0, p0);
-    			append_dev(section0, t3);
-    			append_dev(section0, p1);
-    			append_dev(article, t5);
+    			append_dev(article, section);
+    			append_dev(section, h1);
+    			append_dev(section, t1);
+    			append_dev(section, br);
+    			append_dev(section, t2);
+    			append_dev(section, p0);
+    			append_dev(section, t4);
+    			append_dev(section, p1);
+    			append_dev(p1, t5);
+    			append_dev(p1, a0);
+    			append_dev(p1, t7);
+    			append_dev(p1, a1);
+    			append_dev(p1, t9);
+    			append_dev(article, t10);
     			append_dev(article, div0);
-    			append_dev(article, t6);
+    			append_dev(article, t11);
     			append_dev(article, div3);
     			append_dev(div3, div1);
     			mount_component(scrolly, div1, null);
-    			append_dev(div3, t7);
+    			append_dev(div3, t12);
     			append_dev(div3, div2);
     			mount_component(visualization, div2, null);
-    			append_dev(article, t8);
+    			append_dev(article, t13);
     			append_dev(article, div4);
-    			append_dev(article, t9);
-    			append_dev(article, section1);
-    			append_dev(section1, h21);
-    			append_dev(section1, t11);
-    			append_dev(section1, p2);
-    			append_dev(section1, t13);
-    			append_dev(section1, p3);
-    			append_dev(section1, t15);
-    			append_dev(section1, br0);
-    			append_dev(section1, t16);
-    			append_dev(section1, br1);
-    			append_dev(section1, t17);
-    			append_dev(section1, br2);
-    			append_dev(section1, t18);
-    			append_dev(section1, br3);
-    			append_dev(section1, t19);
-    			append_dev(section1, br4);
-    			append_dev(section1, t20);
-    			append_dev(section1, br5);
-    			append_dev(section1, t21);
-    			append_dev(section1, br6);
-    			append_dev(section1, t22);
-    			append_dev(section1, br7);
-    			append_dev(section1, t23);
-    			append_dev(section1, br8);
-    			append_dev(section1, t24);
-    			append_dev(section1, br9);
-    			append_dev(section1, t25);
-    			append_dev(section1, br10);
-    			append_dev(section1, t26);
-    			append_dev(section1, br11);
-    			append_dev(section1, t27);
-    			append_dev(section1, br12);
-    			append_dev(section1, t28);
-    			append_dev(section1, br13);
-    			append_dev(section1, t29);
-    			append_dev(section1, br14);
-    			append_dev(section1, t30);
-    			append_dev(section1, br15);
-    			append_dev(section1, t31);
-    			append_dev(section1, br16);
-    			append_dev(section1, t32);
-    			append_dev(section1, br17);
-    			append_dev(section1, t33);
-    			append_dev(section1, br18);
-    			append_dev(section1, t34);
-    			append_dev(section1, br19);
-    			append_dev(section1, t35);
-    			append_dev(section1, br20);
-    			append_dev(section1, t36);
-    			append_dev(section1, br21);
-    			append_dev(section1, t37);
-    			append_dev(section1, br22);
-    			append_dev(section1, t38);
-    			append_dev(section1, br23);
-    			append_dev(section1, t39);
-    			append_dev(section1, br24);
+    			mount_component(analysis, div4, null);
     			current = true;
     		},
     		p: function update(ctx, [dirty]) {
     			const scrolly_changes = {};
 
-    			if (dirty & /*$$scope, value*/ 258) {
+    			if (dirty & /*$$scope, value*/ 257) {
     				scrolly_changes.$$scope = { dirty, ctx };
     			}
 
-    			if (!updating_value && dirty & /*value*/ 2) {
+    			if (!updating_value && dirty & /*value*/ 1) {
     				updating_value = true;
-    				scrolly_changes.value = /*value*/ ctx[1];
+    				scrolly_changes.value = /*value*/ ctx[0];
     				add_flush_callback(() => updating_value = false);
     			}
 
     			scrolly.$set(scrolly_changes);
-
-    			if (!current || dirty & /*conclusionVisible*/ 1) {
-    				set_style(section1, "visibility", /*conclusionVisible*/ ctx[0] ? 'visible' : 'hidden');
-    			}
     		},
     		i: function intro(local) {
     			if (current) return;
     			transition_in(scrolly.$$.fragment, local);
     			transition_in(visualization.$$.fragment, local);
+    			transition_in(analysis.$$.fragment, local);
     			current = true;
     		},
     		o: function outro(local) {
     			transition_out(scrolly.$$.fragment, local);
     			transition_out(visualization.$$.fragment, local);
+    			transition_out(analysis.$$.fragment, local);
     			current = false;
     		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(article);
     			destroy_component(scrolly);
     			destroy_component(visualization);
+    			destroy_component(analysis);
     		}
     	};
 
@@ -1998,18 +2797,18 @@ var app = (function () {
 
     	const steps = [
     		"<p>Welcome to the Jones Falls stream in Baltimore, Maryland. </p><p> Meet Mr. Trash Wheel®",
-    		"<p>Mr. Trash Wheel® has a simple job. And that job is to consume garbage.",
-    		"<p>Here comes some now.</p>",
+    		"<p>Mr. Trash Wheel® has a simple job. And that job is to consume garbage.</p><p> He does that by using the water's current or his solar panels to rake through debris. It's pretty amazing to see.",
+    		"<p>How much trash does a guy like this filter? Here comes garbage now.</p>",
     		"<p>This is one plastic bottle.</p>",
-    		"<p>Here is a cigarette butt.</p>",
+    		"<p>There goes a cigarette butt.</p>",
     		"<p>Anyone missing a ball? A glass bottle? Polyethylene? An old wrapper?</p>",
-    		"<p>Let's see how much garbage comes through in a typical day.</p>"
+    		"<p>Let's see how much comes through in a typical day's work, which we'll track as 24 hours.</p>"
     	];
 
     	function updateConclusionVisibility() {
     		document.querySelector('.conclusion');
     		const visualizationEnd = document.querySelector('.spacer:last-of-type').getBoundingClientRect().top;
-    		$$invalidate(0, conclusionVisible = visualizationEnd < 0);
+    		conclusionVisible = visualizationEnd < 0;
     	}
 
     	onMount(() => {
@@ -2028,12 +2827,13 @@ var app = (function () {
 
     	function scrolly_value_binding(value$1) {
     		value = value$1;
-    		$$invalidate(1, value);
+    		$$invalidate(0, value);
     	}
 
     	$$self.$capture_state = () => ({
-    		Visualization: Boat,
+    		Visualization: Collection,
     		Scrolly,
+    		Analysis,
     		conclusionVisible,
     		value,
     		steps,
@@ -2042,15 +2842,15 @@ var app = (function () {
     	});
 
     	$$self.$inject_state = $$props => {
-    		if ('conclusionVisible' in $$props) $$invalidate(0, conclusionVisible = $$props.conclusionVisible);
-    		if ('value' in $$props) $$invalidate(1, value = $$props.value);
+    		if ('conclusionVisible' in $$props) conclusionVisible = $$props.conclusionVisible;
+    		if ('value' in $$props) $$invalidate(0, value = $$props.value);
     	};
 
     	if ($$props && "$$inject" in $$props) {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [conclusionVisible, value, steps, scrolly_value_binding];
+    	return [value, steps, scrolly_value_binding];
     }
 
     class App extends SvelteComponentDev {
