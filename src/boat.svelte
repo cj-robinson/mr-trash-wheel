@@ -9,6 +9,7 @@
 	let maxInitialOffset = Number.MIN_VALUE;
 	let currentHour = 0;
 	let squareBounds = { top: 0, bottom: 0 };
+	let zIndex = 0;
   
 	const objectConfigs = [
 	  { type: 'waterbottle', number: 1981, imageSrc: 'water_bottle.svg' },
@@ -108,11 +109,13 @@
 				...obj,
 				horizontal: obj.originalHorizontal,
 				offset: newOffset <= squareBounds.top ? squareBounds.top : newOffset,
-				transition: "none"
+				transition: "none",
+				zIndex: newOffset === squareBounds.top ? 1 : 1000,  // Ensures it's behind when at the top
 			};
 			});
 		}
 		}
+
 </script>
   
   
@@ -125,10 +128,13 @@
 	}
 	.center-square {
 		width: 100px;
-		height: 100px;
-		border: 2px solid black; 
+		height: 200px;
 		top: 10%;
-		position: sticky
+		position: sticky;
+		background-image: url("/MrTrashWheel.png");
+		background-size: 100%;
+		background-repeat: no-repeat;
+		z-index: 100000;
 	}
 	.hour-counter {
 		width: 30%;
@@ -147,20 +153,21 @@
 <div class="center-square">
 	{#each objects as { id, offset, horizontal, imageSrc, type, transition}}
 		{#if type === 'waterbottle'}
-			<div class="shape" style="position: absolute; background-color: blue; top: {offset}px; left: {horizontal}px; transition: {transition}" />
+			<div class="shape" style="position: absolute; background-color: blue; top: {offset}px; left: {horizontal}px; transition: {transition}; z-index: {zIndex};" />
 		{:else if type === 'plasticbags'}
-			<div class="shape" style="position: absolute; background-color: green; top: {offset}px; left: {horizontal}px;  transition: {transition}" />
+			<div class="shape" style="position: absolute; background-color: green; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
 		{:else if type === 'plastics'}
-			<div class="shape" style="position: absolute; background-color: purple; top: {offset}px; left: {horizontal}px; transition: {transition}" />
+			<div class="shape" style="position: absolute; background-color: purple; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
 		{:else if type === 'wrappers'}
-			<div class="shape" style="position: absolute; background-color: yellow; top: {offset}px; left: {horizontal}px; transition: {transition}" />
+			<div class="shape" style="position: absolute; background-color: yellow; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
 		{:else if type === 'sportsballs'}
-			<div class="shape" style="position: absolute; background-color: orange; top: {offset}px; left: {horizontal}px; transition: {transition}" />
+			<div class="shape" style="position: absolute; background-color: orange; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
 		{:else if type === 'cig'}
-			<div class="shape" style="position: absolute; background-color: black; top: {offset}px; left: {horizontal}px; transition: {transition}" />
+			<div class="shape" style="position: absolute; background-color: black; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
 		{/if}
 	{/each}
 </div>
+
 <div class="hour-counter-container">
 	{#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}
 		<div class="hour-counter" style="top: 20%; z-index: 10; right: 10%;">
