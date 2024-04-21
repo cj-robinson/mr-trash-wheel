@@ -514,37 +514,33 @@ var app = (function () {
     	return child_ctx;
     }
 
-    // (165:27) 
+    // (179:1) {#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}
     function create_if_block_6(ctx) {
     	let div;
+    	let t0;
+    	let t1;
+    	let t2;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-1pbhu9t");
-    			set_style(div, "position", "absolute");
-    			set_style(div, "background-color", "black");
-    			set_style(div, "top", /*offset*/ ctx[17] + "px");
-    			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			set_style(div, "transition", /*transition*/ ctx[21]);
-    			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 165, 3, 5554);
+    			t0 = text("Current Hour: ");
+    			t1 = text(/*currentHour*/ ctx[3]);
+    			t2 = text(":00");
+    			attr_dev(div, "class", "hour-counter svelte-1xvqc33");
+    			set_style(div, "top", "20%");
+    			set_style(div, "z-index", "10");
+    			set_style(div, "right", "10%");
+    			add_location(div, file$2, 179, 2, 5060);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
+    			append_dev(div, t0);
+    			append_dev(div, t1);
+    			append_dev(div, t2);
     		},
     		p: function update(ctx, dirty) {
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "top", /*offset*/ ctx[17] + "px");
-    			}
-
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "left", /*horizontal*/ ctx[18] + "px");
-    			}
-
-    			if (dirty & /*objects*/ 1) {
-    				set_style(div, "transition", /*transition*/ ctx[21]);
-    			}
+    			if (dirty & /*currentHour*/ 8) set_data_dev(t1, /*currentHour*/ ctx[3]);
     		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
@@ -555,28 +551,28 @@ var app = (function () {
     		block,
     		id: create_if_block_6.name,
     		type: "if",
-    		source: "(165:27) ",
+    		source: "(179:1) {#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (163:35) 
+    // (199:26) 
     function create_if_block_5(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-1pbhu9t");
+    			attr_dev(div, "class", "shape svelte-1xvqc33");
     			set_style(div, "position", "absolute");
-    			set_style(div, "background-color", "orange");
+    			set_style(div, "background-color", "black");
     			set_style(div, "top", /*offset*/ ctx[17] + "px");
     			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
     			set_style(div, "transition", /*transition*/ ctx[21]);
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 163, 3, 5362);
+    			add_location(div, file$2, 199, 2, 6330);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -603,28 +599,28 @@ var app = (function () {
     		block,
     		id: create_if_block_5.name,
     		type: "if",
-    		source: "(163:35) ",
+    		source: "(199:26) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (161:32) 
+    // (197:34) 
     function create_if_block_4(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-1pbhu9t");
+    			attr_dev(div, "class", "shape svelte-1xvqc33");
     			set_style(div, "position", "absolute");
-    			set_style(div, "background-color", "yellow");
+    			set_style(div, "background-color", "orange");
     			set_style(div, "top", /*offset*/ ctx[17] + "px");
     			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
     			set_style(div, "transition", /*transition*/ ctx[21]);
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 161, 3, 5162);
+    			add_location(div, file$2, 197, 2, 6140);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -651,28 +647,28 @@ var app = (function () {
     		block,
     		id: create_if_block_4.name,
     		type: "if",
-    		source: "(161:32) ",
+    		source: "(197:34) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (159:32) 
+    // (195:31) 
     function create_if_block_3(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-1pbhu9t");
+    			attr_dev(div, "class", "shape svelte-1xvqc33");
     			set_style(div, "position", "absolute");
-    			set_style(div, "background-color", "purple");
+    			set_style(div, "background-color", "yellow");
     			set_style(div, "top", /*offset*/ ctx[17] + "px");
     			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
     			set_style(div, "transition", /*transition*/ ctx[21]);
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 159, 3, 4965);
+    			add_location(div, file$2, 195, 2, 5942);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -699,28 +695,28 @@ var app = (function () {
     		block,
     		id: create_if_block_3.name,
     		type: "if",
-    		source: "(159:32) ",
+    		source: "(195:31) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (157:35) 
+    // (193:31) 
     function create_if_block_2(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-1pbhu9t");
+    			attr_dev(div, "class", "shape svelte-1xvqc33");
     			set_style(div, "position", "absolute");
-    			set_style(div, "background-color", "green");
+    			set_style(div, "background-color", "purple");
     			set_style(div, "top", /*offset*/ ctx[17] + "px");
     			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
     			set_style(div, "transition", /*transition*/ ctx[21]);
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 157, 3, 4769);
+    			add_location(div, file$2, 193, 2, 5747);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -747,28 +743,28 @@ var app = (function () {
     		block,
     		id: create_if_block_2.name,
     		type: "if",
-    		source: "(157:35) ",
+    		source: "(193:31) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (155:2) {#if type === 'waterbottle'}
+    // (191:34) 
     function create_if_block_1(ctx) {
     	let div;
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			attr_dev(div, "class", "shape svelte-1pbhu9t");
+    			attr_dev(div, "class", "shape svelte-1xvqc33");
     			set_style(div, "position", "absolute");
-    			set_style(div, "background-color", "blue");
+    			set_style(div, "background-color", "green");
     			set_style(div, "top", /*offset*/ ctx[17] + "px");
     			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
     			set_style(div, "transition", /*transition*/ ctx[21]);
     			set_style(div, "z-index", /*zIndex*/ ctx[4]);
-    			add_location(div, file$2, 155, 3, 4572);
+    			add_location(div, file$2, 191, 2, 5553);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -795,24 +791,72 @@ var app = (function () {
     		block,
     		id: create_if_block_1.name,
     		type: "if",
-    		source: "(155:2) {#if type === 'waterbottle'}",
+    		source: "(191:34) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (154:1) {#each objects as { id, offset, horizontal, imageSrc, type, transition}}
+    // (189:1) {#if type === 'waterbottle'}
+    function create_if_block(ctx) {
+    	let div;
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+    			attr_dev(div, "class", "shape svelte-1xvqc33");
+    			set_style(div, "position", "absolute");
+    			set_style(div, "background-color", "blue");
+    			set_style(div, "top", /*offset*/ ctx[17] + "px");
+    			set_style(div, "left", /*horizontal*/ ctx[18] + "px");
+    			set_style(div, "transition", /*transition*/ ctx[21]);
+    			set_style(div, "z-index", /*zIndex*/ ctx[4]);
+    			add_location(div, file$2, 189, 2, 5358);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+    		},
+    		p: function update(ctx, dirty) {
+    			if (dirty & /*objects*/ 1) {
+    				set_style(div, "top", /*offset*/ ctx[17] + "px");
+    			}
+
+    			if (dirty & /*objects*/ 1) {
+    				set_style(div, "left", /*horizontal*/ ctx[18] + "px");
+    			}
+
+    			if (dirty & /*objects*/ 1) {
+    				set_style(div, "transition", /*transition*/ ctx[21]);
+    			}
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block.name,
+    		type: "if",
+    		source: "(189:1) {#if type === 'waterbottle'}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (188:1) {#each objects as { id, offset, horizontal, imageSrc, type, transition}}
     function create_each_block$1(ctx) {
     	let if_block_anchor;
 
     	function select_block_type(ctx, dirty) {
-    		if (/*type*/ ctx[20] === 'waterbottle') return create_if_block_1;
-    		if (/*type*/ ctx[20] === 'plasticbags') return create_if_block_2;
-    		if (/*type*/ ctx[20] === 'plastics') return create_if_block_3;
-    		if (/*type*/ ctx[20] === 'wrappers') return create_if_block_4;
-    		if (/*type*/ ctx[20] === 'sportsballs') return create_if_block_5;
-    		if (/*type*/ ctx[20] === 'cig') return create_if_block_6;
+    		if (/*type*/ ctx[20] === 'waterbottle') return create_if_block;
+    		if (/*type*/ ctx[20] === 'plasticbags') return create_if_block_1;
+    		if (/*type*/ ctx[20] === 'plastics') return create_if_block_2;
+    		if (/*type*/ ctx[20] === 'wrappers') return create_if_block_3;
+    		if (/*type*/ ctx[20] === 'sportsballs') return create_if_block_4;
+    		if (/*type*/ ctx[20] === 'cig') return create_if_block_5;
     	}
 
     	let current_block_type = select_block_type(ctx);
@@ -853,51 +897,7 @@ var app = (function () {
     		block,
     		id: create_each_block$1.name,
     		type: "each",
-    		source: "(154:1) {#each objects as { id, offset, horizontal, imageSrc, type, transition}}",
-    		ctx
-    	});
-
-    	return block;
-    }
-
-    // (172:1) {#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}
-    function create_if_block(ctx) {
-    	let div;
-    	let t0;
-    	let t1;
-    	let t2;
-
-    	const block = {
-    		c: function create() {
-    			div = element("div");
-    			t0 = text("Current Hour: ");
-    			t1 = text(/*currentHour*/ ctx[3]);
-    			t2 = text(":00");
-    			attr_dev(div, "class", "hour-counter svelte-1pbhu9t");
-    			set_style(div, "top", "20%");
-    			set_style(div, "z-index", "10");
-    			set_style(div, "right", "10%");
-    			add_location(div, file$2, 172, 2, 5858);
-    		},
-    		m: function mount(target, anchor) {
-    			insert_dev(target, div, anchor);
-    			append_dev(div, t0);
-    			append_dev(div, t1);
-    			append_dev(div, t2);
-    		},
-    		p: function update(ctx, dirty) {
-    			if (dirty & /*currentHour*/ 8) set_data_dev(t1, /*currentHour*/ ctx[3]);
-    		},
-    		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div);
-    		}
-    	};
-
-    	dispatch_dev("SvelteRegisterBlock", {
-    		block,
-    		id: create_if_block.name,
-    		type: "if",
-    		source: "(172:1) {#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}",
+    		source: "(188:1) {#each objects as { id, offset, horizontal, imageSrc, type, transition}}",
     		ctx
     	});
 
@@ -910,6 +910,9 @@ var app = (function () {
     	let div1;
     	let t1;
     	let div2;
+    	let t2;
+    	let div3;
+    	let if_block = window.scrollY >= /*minInitialOffset*/ ctx[1] && window.scrollY <= /*maxInitialOffset*/ ctx[2] && create_if_block_6(ctx);
     	let each_value = /*objects*/ ctx[0];
     	validate_each_argument(each_value);
     	let each_blocks = [];
@@ -918,47 +921,64 @@ var app = (function () {
     		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
     	}
 
-    	let if_block = window.scrollY >= /*minInitialOffset*/ ctx[1] && window.scrollY <= /*maxInitialOffset*/ ctx[2] && create_if_block(ctx);
-
     	const block = {
     		c: function create() {
     			div0 = element("div");
+    			if (if_block) if_block.c();
+    			t0 = space();
+    			div1 = element("div");
+    			t1 = space();
+    			div2 = element("div");
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].c();
     			}
 
-    			t0 = space();
-    			div1 = element("div");
-    			if (if_block) if_block.c();
-    			t1 = space();
-    			div2 = element("div");
-    			attr_dev(div0, "class", "center-square svelte-1pbhu9t");
-    			add_location(div0, file$2, 152, 0, 4436);
-    			attr_dev(div1, "class", "hour-counter-container svelte-1pbhu9t");
-    			add_location(div1, file$2, 170, 0, 5739);
-    			set_style(div2, "height", "30000px");
-    			add_location(div2, file$2, 177, 0, 5985);
+    			t2 = space();
+    			div3 = element("div");
+    			attr_dev(div0, "class", "hour-counter-container svelte-1xvqc33");
+    			add_location(div0, file$2, 177, 0, 4941);
+    			attr_dev(div1, "class", "center-square svelte-1xvqc33");
+    			add_location(div1, file$2, 185, 0, 5188);
+    			attr_dev(div2, "class", "trash-wrapper svelte-1xvqc33");
+    			add_location(div2, file$2, 186, 0, 5223);
+    			set_style(div3, "height", "30000px");
+    			add_location(div3, file$2, 204, 0, 6514);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div0, anchor);
+    			if (if_block) if_block.m(div0, null);
+    			insert_dev(target, t0, anchor);
+    			insert_dev(target, div1, anchor);
+    			insert_dev(target, t1, anchor);
+    			insert_dev(target, div2, anchor);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				if (each_blocks[i]) {
-    					each_blocks[i].m(div0, null);
+    					each_blocks[i].m(div2, null);
     				}
     			}
 
-    			insert_dev(target, t0, anchor);
-    			insert_dev(target, div1, anchor);
-    			if (if_block) if_block.m(div1, null);
-    			insert_dev(target, t1, anchor);
-    			insert_dev(target, div2, anchor);
+    			insert_dev(target, t2, anchor);
+    			insert_dev(target, div3, anchor);
     		},
     		p: function update(ctx, [dirty]) {
+    			if (window.scrollY >= /*minInitialOffset*/ ctx[1] && window.scrollY <= /*maxInitialOffset*/ ctx[2]) {
+    				if (if_block) {
+    					if_block.p(ctx, dirty);
+    				} else {
+    					if_block = create_if_block_6(ctx);
+    					if_block.c();
+    					if_block.m(div0, null);
+    				}
+    			} else if (if_block) {
+    				if_block.d(1);
+    				if_block = null;
+    			}
+
     			if (dirty & /*objects, zIndex*/ 17) {
     				each_value = /*objects*/ ctx[0];
     				validate_each_argument(each_value);
@@ -972,7 +992,7 @@ var app = (function () {
     					} else {
     						each_blocks[i] = create_each_block$1(child_ctx);
     						each_blocks[i].c();
-    						each_blocks[i].m(div0, null);
+    						each_blocks[i].m(div2, null);
     					}
     				}
 
@@ -982,30 +1002,19 @@ var app = (function () {
 
     				each_blocks.length = each_value.length;
     			}
-
-    			if (window.scrollY >= /*minInitialOffset*/ ctx[1] && window.scrollY <= /*maxInitialOffset*/ ctx[2]) {
-    				if (if_block) {
-    					if_block.p(ctx, dirty);
-    				} else {
-    					if_block = create_if_block(ctx);
-    					if_block.c();
-    					if_block.m(div1, null);
-    				}
-    			} else if (if_block) {
-    				if_block.d(1);
-    				if_block = null;
-    			}
     		},
     		i: noop,
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div0);
-    			destroy_each(each_blocks, detaching);
+    			if (if_block) if_block.d();
     			if (detaching) detach_dev(t0);
     			if (detaching) detach_dev(div1);
-    			if (if_block) if_block.d();
     			if (detaching) detach_dev(t1);
     			if (detaching) detach_dev(div2);
+    			destroy_each(each_blocks, detaching);
+    			if (detaching) detach_dev(t2);
+    			if (detaching) detach_dev(div3);
     		}
     	};
 
@@ -1071,7 +1080,9 @@ var app = (function () {
     		}
     	];
 
-    	let columns = 200; // This can be adjusted based on the screen width or desired grid density
+    	//
+    	let columns = 100; // This can be adjusted based on the screen width or desired grid density
+
     	let cellWidth = 10;
     	let cellHeight = 10;
 
@@ -1081,7 +1092,21 @@ var app = (function () {
     		initialScrollY = window.scrollY;
     		initObjects();
     		calculateGridPositions();
-    		window.addEventListener('scroll', handleScroll);
+
+    		function throttle(fn, wait) {
+    			let last = 0;
+
+    			return (...args) => {
+    				const now = new Date();
+
+    				if (now - last > wait) {
+    					last = now;
+    					fn(...args);
+    				}
+    			};
+    		}
+
+    		window.addEventListener('scroll', throttle(handleScroll, 100));
 
     		return () => {
     			window.removeEventListener('scroll', handleScroll);
@@ -1089,7 +1114,7 @@ var app = (function () {
     	});
 
     	function calculateGridPositions() {
-    		let yStart = windowHeight - 600; // Starting below the viewport height
+    		let yStart = windowHeight + windowHeight * 3; // Starting below the viewport height
     		let xStart = 0;
 
     		objectConfigs.forEach(config => {
@@ -1126,7 +1151,7 @@ var app = (function () {
     					earlyAppearanceOffset = minInitialOffset + Math.random() * (maxInitialOffset - minInitialOffset);
     				}
 
-    				const originalHorizontal = Math.random() * 100;
+    				const originalHorizontal = windowWidth / 2 - 55 + Math.random() * 85;
 
     				return {
     					id: `${config.type}-${i}`,
@@ -1144,13 +1169,14 @@ var app = (function () {
     		const scrollY = window.scrollY;
     		$$invalidate(3, currentHour = Math.floor((scrollY - minInitialOffset) / (maxInitialOffset - minInitialOffset) * 24) % 24);
 
-    		if (scrollY >= maxInitialOffset) {
+    		if (scrollY >= maxInitialOffset + windowHeight) {
     			// Move shapes to their final grid positions
     			$$invalidate(0, objects = objects.map(obj => ({
     				...obj,
     				horizontal: obj.finalX,
     				offset: obj.finalY,
-    				transition: "left 5s, top 5s"
+    				transition: "left 3s, top 3s",
+    				position: "sticky"
     			})));
     		} else {
     			// Normal scroll behavior
@@ -1498,7 +1524,7 @@ var app = (function () {
     	return child_ctx;
     }
 
-    // (123:3) {#each steps as text, i}
+    // (124:3) {#each steps as text, i}
     function create_each_block(ctx) {
     	let div1;
     	let div0;
@@ -1508,11 +1534,11 @@ var app = (function () {
     		c: function create() {
     			div1 = element("div");
     			div0 = element("div");
-    			attr_dev(div0, "class", "step-content svelte-1mz3adm");
-    			add_location(div0, file, 124, 4, 2817);
-    			attr_dev(div1, "class", "step svelte-1mz3adm");
+    			attr_dev(div0, "class", "step-content svelte-t4ugqa");
+    			add_location(div0, file, 125, 4, 2830);
+    			attr_dev(div1, "class", "step svelte-t4ugqa");
     			toggle_class(div1, "active", /*value*/ ctx[1] === /*i*/ ctx[7]);
-    			add_location(div1, file, 123, 5, 2767);
+    			add_location(div1, file, 124, 5, 2780);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div1, anchor);
@@ -1533,14 +1559,14 @@ var app = (function () {
     		block,
     		id: create_each_block.name,
     		type: "each",
-    		source: "(123:3) {#each steps as text, i}",
+    		source: "(124:3) {#each steps as text, i}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (122:4) <Scrolly bind:value>
+    // (123:4) <Scrolly bind:value>
     function create_default_slot(ctx) {
     	let t;
     	let div;
@@ -1560,8 +1586,8 @@ var app = (function () {
 
     			t = space();
     			div = element("div");
-    			attr_dev(div, "class", "spacer svelte-1mz3adm");
-    			add_location(div, file, 127, 3, 2888);
+    			attr_dev(div, "class", "spacer svelte-t4ugqa");
+    			add_location(div, file, 128, 3, 2901);
     		},
     		m: function mount(target, anchor) {
     			for (let i = 0; i < each_blocks.length; i += 1) {
@@ -1609,7 +1635,7 @@ var app = (function () {
     		block,
     		id: create_default_slot.name,
     		type: "slot",
-    		source: "(122:4) <Scrolly bind:value>",
+    		source: "(123:4) <Scrolly bind:value>",
     		ctx
     	});
 
@@ -1795,53 +1821,53 @@ var app = (function () {
     			br23 = element("br");
     			t39 = space();
     			br24 = element("br");
-    			add_location(h20, file, 112, 3, 2387);
-    			add_location(p0, file, 113, 3, 2423);
-    			add_location(p1, file, 114, 3, 2504);
-    			attr_dev(section0, "class", "article-section svelte-1mz3adm");
-    			add_location(section0, file, 111, 1, 2350);
-    			attr_dev(div0, "class", "spacer svelte-1mz3adm");
-    			add_location(div0, file, 118, 1, 2617);
-    			attr_dev(div1, "class", "steps-container svelte-1mz3adm");
-    			add_location(div1, file, 120, 2, 2679);
-    			attr_dev(div2, "class", "sticky svelte-1mz3adm");
-    			add_location(div2, file, 130, 2, 2937);
-    			attr_dev(div3, "class", "section-container svelte-1mz3adm");
-    			add_location(div3, file, 119, 1, 2645);
-    			attr_dev(div4, "class", "spacer svelte-1mz3adm");
-    			add_location(div4, file, 136, 1, 3083);
-    			add_location(h21, file, 139, 3, 3226);
-    			add_location(p2, file, 140, 3, 3279);
-    			add_location(p3, file, 141, 3, 3524);
-    			add_location(br0, file, 142, 3, 3786);
-    			add_location(br1, file, 143, 3, 3794);
-    			add_location(br2, file, 144, 3, 3802);
-    			add_location(br3, file, 145, 3, 3810);
-    			add_location(br4, file, 146, 3, 3818);
-    			add_location(br5, file, 147, 3, 3826);
-    			add_location(br6, file, 148, 3, 3834);
-    			add_location(br7, file, 149, 3, 3842);
-    			add_location(br8, file, 150, 3, 3850);
-    			add_location(br9, file, 151, 3, 3858);
-    			add_location(br10, file, 152, 3, 3866);
-    			add_location(br11, file, 153, 3, 3874);
-    			add_location(br12, file, 154, 3, 3882);
-    			add_location(br13, file, 155, 3, 3890);
-    			add_location(br14, file, 156, 3, 3898);
-    			add_location(br15, file, 157, 3, 3906);
-    			add_location(br16, file, 158, 3, 3914);
-    			add_location(br17, file, 159, 3, 3922);
-    			add_location(br18, file, 160, 3, 3930);
-    			add_location(br19, file, 161, 3, 3938);
-    			add_location(br20, file, 162, 3, 3946);
-    			add_location(br21, file, 163, 3, 3954);
-    			add_location(br22, file, 164, 3, 3962);
-    			add_location(br23, file, 165, 3, 3970);
-    			add_location(br24, file, 166, 3, 3978);
-    			attr_dev(section1, "class", "article-section conclusion svelte-1mz3adm");
+    			add_location(h20, file, 113, 3, 2400);
+    			add_location(p0, file, 114, 3, 2436);
+    			add_location(p1, file, 115, 3, 2517);
+    			attr_dev(section0, "class", "article-section svelte-t4ugqa");
+    			add_location(section0, file, 112, 1, 2363);
+    			attr_dev(div0, "class", "spacer svelte-t4ugqa");
+    			add_location(div0, file, 119, 1, 2630);
+    			attr_dev(div1, "class", "steps-container svelte-t4ugqa");
+    			add_location(div1, file, 121, 2, 2692);
+    			attr_dev(div2, "class", "sticky svelte-t4ugqa");
+    			add_location(div2, file, 131, 2, 2950);
+    			attr_dev(div3, "class", "section-container svelte-t4ugqa");
+    			add_location(div3, file, 120, 1, 2658);
+    			attr_dev(div4, "class", "spacer svelte-t4ugqa");
+    			add_location(div4, file, 137, 1, 3096);
+    			add_location(h21, file, 140, 3, 3239);
+    			add_location(p2, file, 141, 3, 3292);
+    			add_location(p3, file, 142, 3, 3537);
+    			add_location(br0, file, 143, 3, 3799);
+    			add_location(br1, file, 144, 3, 3807);
+    			add_location(br2, file, 145, 3, 3815);
+    			add_location(br3, file, 146, 3, 3823);
+    			add_location(br4, file, 147, 3, 3831);
+    			add_location(br5, file, 148, 3, 3839);
+    			add_location(br6, file, 149, 3, 3847);
+    			add_location(br7, file, 150, 3, 3855);
+    			add_location(br8, file, 151, 3, 3863);
+    			add_location(br9, file, 152, 3, 3871);
+    			add_location(br10, file, 153, 3, 3879);
+    			add_location(br11, file, 154, 3, 3887);
+    			add_location(br12, file, 155, 3, 3895);
+    			add_location(br13, file, 156, 3, 3903);
+    			add_location(br14, file, 157, 3, 3911);
+    			add_location(br15, file, 158, 3, 3919);
+    			add_location(br16, file, 159, 3, 3927);
+    			add_location(br17, file, 160, 3, 3935);
+    			add_location(br18, file, 161, 3, 3943);
+    			add_location(br19, file, 162, 3, 3951);
+    			add_location(br20, file, 163, 3, 3959);
+    			add_location(br21, file, 164, 3, 3967);
+    			add_location(br22, file, 165, 3, 3975);
+    			add_location(br23, file, 166, 3, 3983);
+    			add_location(br24, file, 167, 3, 3991);
+    			attr_dev(section1, "class", "article-section conclusion svelte-t4ugqa");
     			set_style(section1, "visibility", /*conclusionVisible*/ ctx[0] ? 'visible' : 'hidden');
-    			add_location(section1, file, 138, 1, 3114);
-    			add_location(article, file, 110, 2, 2339);
+    			add_location(section1, file, 139, 1, 3127);
+    			add_location(article, file, 111, 2, 2352);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");

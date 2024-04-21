@@ -57,16 +57,17 @@
 	}
 
 	.section-container {
-		margin-top: 2em;
+		margin-top: 1.5em;
 		transition: background 100ms;
 		display: flex;
+		justify-content: center;
+
 	}
 	
 	.sticky {
 		position: sticky;
 		top: 10%;
 		width: 100%;
-		display: flex;
 		justify-content: center;
 	}
 

@@ -21,7 +21,9 @@
 	  { type: 'sportsballs', number: 867, imageSrc: 'water_bottle.svg' },
 	];
 
-	let columns = 200;  // This can be adjusted based on the screen width or desired grid density
+	1981 + 18656 + 867 + 1462 + 21 + 1427 + 867
+	//
+	let columns = 100;  // This can be adjusted based on the screen width or desired grid density
 	let cellWidth = 10;
 	let cellHeight = 10;
 
@@ -31,16 +33,27 @@
 	  windowWidth = window.innerWidth;
 	  initialScrollY = window.scrollY;
 	  initObjects();
+
 	  calculateGridPositions();
-	  
-	  window.addEventListener('scroll', handleScroll);
+	  function throttle(fn, wait) {
+			let last = 0;
+			return (...args) => {
+				const now = new Date();
+				if (now - last > wait) {
+					last = now;
+					fn(...args);
+				}
+			};
+		}
+
+	window.addEventListener('scroll', throttle(handleScroll, 100));
 	  return () => {
 		window.removeEventListener('scroll', handleScroll);
 	  };
 	});
 
 	function calculateGridPositions() {
-		let yStart = windowHeight - 600; // Starting below the viewport height
+		let yStart = windowHeight + windowHeight * 3; // Starting below the viewport height
 		let xStart = 0;
 		objectConfigs.forEach(config => {
 		let index = 0;
@@ -74,7 +87,7 @@
 				earlyAppearanceOffset = minInitialOffset + Math.random() * (maxInitialOffset - minInitialOffset);
 			}
 
-			const originalHorizontal = Math.random() * 100
+			const originalHorizontal =(windowWidth / 2 - 55) + Math.random() * 85
 			return {
 				id: `${config.type}-${i}`,
 				type: config.type,
@@ -93,13 +106,14 @@
 		const scrollY = window.scrollY;
 		currentHour = Math.floor((scrollY - minInitialOffset) / (maxInitialOffset - minInitialOffset) * 24) % 24;
 
-		if (scrollY >= maxInitialOffset) {
+		if (scrollY >= maxInitialOffset + windowHeight) {
 			// Move shapes to their final grid positions
 			objects = objects.map(obj => ({
 			...obj,
 			horizontal: obj.finalX,
 			offset: obj.finalY,
-			transition: "left 5s, top 5s"
+			transition: "left 3s, top 3s",
+			position: "sticky"
 			}));
 		} else {
 			// Normal scroll behavior
@@ -110,7 +124,7 @@
 				horizontal: obj.originalHorizontal,
 				offset: newOffset <= squareBounds.top ? squareBounds.top : newOffset,
 				transition: "none",
-				zIndex: newOffset === squareBounds.top ? 1 : 1000,  // Ensures it's behind when at the top
+				zIndex: newOffset === squareBounds.top ? 1 : 1000  // Ensures it's behind when at the top
 			};
 			});
 		}
@@ -125,16 +139,25 @@
 		height: 5px;
 		border-radius: 25px;
 		background-color: green;
+		position: sticky;
+		z-index: -1;
 	}
 	.center-square {
-		width: 100px;
-		height: 200px;
-		top: 10%;
+		width: 150px;
+		height: 150px;
+		top: 7%;
+		left: 45%; /* Center horizontally in the viewport */
 		position: sticky;
 		background-image: url("/MrTrashWheel.png");
 		background-size: 100%;
 		background-repeat: no-repeat;
 		z-index: 100000;
+	}
+	.trash-wrapper {
+		width: 100px;
+		height: 10000px;
+		top: 10%;
+		position: sticky;
 	}
 	.hour-counter {
 		width: 30%;
@@ -145,28 +168,12 @@
 		position: sticky;
 	}
 	.hour-counter-container{
-		position: absolute;
-		width: 100%
+		position: sticky;
+		width: 100%;
+		left: 10%
 	}
 </style>
 
-<div class="center-square">
-	{#each objects as { id, offset, horizontal, imageSrc, type, transition}}
-		{#if type === 'waterbottle'}
-			<div class="shape" style="position: absolute; background-color: blue; top: {offset}px; left: {horizontal}px; transition: {transition}; z-index: {zIndex};" />
-		{:else if type === 'plasticbags'}
-			<div class="shape" style="position: absolute; background-color: green; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
-		{:else if type === 'plastics'}
-			<div class="shape" style="position: absolute; background-color: purple; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
-		{:else if type === 'wrappers'}
-			<div class="shape" style="position: absolute; background-color: yellow; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
-		{:else if type === 'sportsballs'}
-			<div class="shape" style="position: absolute; background-color: orange; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
-		{:else if type === 'cig'}
-			<div class="shape" style="position: absolute; background-color: black; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
-		{/if}
-	{/each}
-</div>
 
 <div class="hour-counter-container">
 	{#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}
@@ -175,4 +182,24 @@
 		</div>
 	{/if}
 </div>
+
+<div class="center-square"> </div>
+<div class="trash-wrapper"> 
+	{#each objects as { id, offset, horizontal, imageSrc, type, transition}}
+	{#if type === 'waterbottle'}
+		<div class="shape" style="position: absolute; background-color: blue; top: {offset}px; left: {horizontal}px; transition: {transition}; z-index: {zIndex};" />
+	{:else if type === 'plasticbags'}
+		<div class="shape" style="position: absolute; background-color: green; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
+	{:else if type === 'plastics'}
+		<div class="shape" style="position: absolute; background-color: purple; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
+	{:else if type === 'wrappers'}
+		<div class="shape" style="position: absolute; background-color: yellow; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
+	{:else if type === 'sportsballs'}
+		<div class="shape" style="position: absolute; background-color: orange; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
+	{:else if type === 'cig'}
+		<div class="shape" style="position: absolute; background-color: black; top: {offset}px; left: {horizontal}px; transition: {transition};  z-index: {zIndex};" />
+	{/if}
+	{/each}
+</div>
+
 <div style="height: 30000px;"></div> <!-- Larger spacer to allow for extended scrolling -->
