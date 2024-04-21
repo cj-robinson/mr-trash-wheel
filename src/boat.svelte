@@ -123,9 +123,8 @@
 				...obj,
 				horizontal: obj.originalHorizontal,
 				offset: newOffset <= squareBounds.top ? squareBounds.top : newOffset,
-				transition: "none",
-				zIndex: newOffset === squareBounds.top ? 1 : 1000  // Ensures it's behind when at the top
-			};
+				transition: "none"
+				};
 			});
 		}
 		}
@@ -160,27 +159,23 @@
 		position: sticky;
 	}
 	.hour-counter {
-		width: 30%;
+		width: 20%;
 		text-align: center;
 		background-color: #f0f0f0;
 		padding: 10px;
+		left: 10%;
+		bottom: 50%;
 		box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 		position: sticky;
 	}
-	.hour-counter-container{
-		width: 100%;
-		left: 10%
-	}
 </style>
 
-
-<div class="hour-counter-container">
-	{#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}
-		<div class="hour-counter" style="top: 20%; z-index: 10; right: 10%;">
-			Current Hour: {currentHour}:00
-		</div>
-	{/if}
+{#if window.scrollY >= minInitialOffset && window.scrollY <= maxInitialOffset}
+<div class="hour-counter" style="top: 40%; z-index: 10; right: 10%;">
+	Current Hour: {currentHour}:00
 </div>
+{/if}
+
 
 <div class="center-square"> </div>
 <div class="trash-wrapper"> 
