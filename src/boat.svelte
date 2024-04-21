@@ -168,7 +168,6 @@
 		position: sticky;
 	}
 	.hour-counter-container{
-		position: sticky;
 		width: 100%;
 		left: 10%
 	}
