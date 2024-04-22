@@ -124,7 +124,7 @@
 	  <p>Society makes a lot of trash. We're not quite sure what to do with it.</p>
 	  <p>Anthropomorphizing might help.</p>
 	  <p>Powered by data from <a href = "https://www.mrtrashwheel.com/">www.mrtrashwheel.com</a>, and thanks to <a href="https://github.com/rfordatascience/tidytuesday/tree/master">#tidytuesday</a> for the idea. </p>
-	  <p>Keep scrolling!</p>
+	  <p>Works best on desktop. Keep scrolling!</p>
 	</section>
   
 	<!-- Spacer to ensure visualization starts off-screen -->
