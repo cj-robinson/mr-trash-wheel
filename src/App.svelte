@@ -68,7 +68,6 @@
 		transition: background 100ms;
 		display: flex;
 		justify-content: center;
-
 	}
 	
 	.sticky {
@@ -142,7 +141,7 @@
 			</Scrolly>
 		</div>
 		<div class="sticky">
-			<Visualization/>
+			<Visualization {steps}/>
 		</div>
 	</div>
 	<div style="position:sticky;">
@@ -152,7 +151,7 @@
 	<div class="half-spacer" />
 	<section class="article-section">
 		<h2>Mr. Trash Wheel Chugs On</h2>
-		<p style="text-align:left">In a time of rapid warming and high levels of carbon, <a href='https://www.nytimes.com/2024/03/31/climate/climate-change-carbon-capture-ccs.html'>engineering our way out of a climate catastrophe</a> can feel fraught. Even Mr. Trash Wheel, due to the complexities involved, must burn the contents of his dumpsters each day rather than recycle the plastics found.</p>
+		<p style="text-align:left">In a time of rapid warming and high levels of carbon, <a href='https://www.nytimes.com/2024/03/31/climate/climate-change-carbon-capture-ccs.html'>engineering our way out of a climate catastrophe</a> can feel fraught. Even Mr. Trash Wheel, due to the complexities involved, must burn the contents of his dumpsters each day rather than recycle the plastics found (the incineration is used to create electricity).</p>
 		<p style="text-align:left">In spite of that, it's galvanizing to see projects that can make an immediate impact on communities and begin to mitigate some of the damage today. While the fight continues for limiting single-use plastics, more googly-eyed plastic interceptors can help alleviate the waste throghout our econosytem in the meantime.</p>
 	</section>
 

@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+    export let steps = [];
 
 	let objects = [];
 	let windowHeight = 0;
@@ -12,14 +13,15 @@
 	let zIndex = 0;
   
 	const objectConfigs = [
-		{ type: 'sportsballs', number: 13, imageSrc: 'water_bottle.svg' },
-		{ type: 'glassbottles', number: 21, imageSrc: 'water_bottle.svg' },
-		{ type: 'plasticbags', number: 867, imageSrc: 'water_bottle.svg' },
-	  { type: 'waterbottle', number: 1981, imageSrc: 'water_bottle.svg' },
-	  { type: 'wrappers', number: 1427, imageSrc: 'water_bottle.svg' },
-	  { type: 'plastics', number: 1462, imageSrc: 'water_bottle.svg' },
-	  { type: 'cig', number: 18656, imageSrc: 'water_bottle.svg' },
+		{ type: 'waterbottle', number: 1981, imageSrc: 'water_bottle.svg', step: 4 },
+		{ type: 'cig', number: 18656, imageSrc: 'water_bottle.svg', step: 5 },
+		{ type: 'sportsballs', number: 13, imageSrc: 'water_bottle.svg', step: 6 },
+		{ type: 'glassbottles', number: 21, imageSrc: 'water_bottle.svg', step: 6 },
+		{ type: 'plasticbags', number: 867, imageSrc: 'water_bottle.svg', step: 6 },
+		{ type: 'wrappers', number: 1427, imageSrc: 'water_bottle.svg', step: 6 },
+		{ type: 'plastics', number: 1462, imageSrc: 'water_bottle.svg', step: 6},
 	];
+
 
 	let columns = 100;  // This can be adjusted based on the screen width or desired grid density
 	let cellWidth = 10;
@@ -51,27 +53,25 @@
 
 
 	function initObjects() {
+        const stepHeight = windowHeight * 3;
+		minInitialOffset = windowHeight * 22;
+		maxInitialOffset = windowHeight * 40;
 
-		minInitialOffset = windowHeight * 22
-		maxInitialOffset = windowHeight * 40
 		objects = objectConfigs.flatMap(config => {
 
 			return Array.from({ length: config.number }, (_, i) => {
+			let stepIndex = steps.findIndex((_, index) => index === config.step);
 			let earlyAppearanceOffset = 0;
 			let originalHorizontal =(windowWidth / 2 - 55) + Math.random() * 85
 
-			if (i < 1 & config.type === 'waterbottle') { // Assuming you want the first two objects of each type to appear earlier
-				earlyAppearanceOffset = windowHeight * 11.9; // Smaller offset for earlier appearance
-			} else if (i < 1 & config.type === 'cig') {
-				earlyAppearanceOffset = windowHeight * 14.9; // Smaller offset for earlier appearance
-			} else if (i < 1 & (config.type === 'wrappers' | config.type === 'plastics' | config.type === 'glassbottles' | config.type === 'sportsballs' |  config.type === 'plasticbags')) {
+			if (i < 1) { // Assuming you want the first two objects of each type to appear earlier
+				earlyAppearanceOffset = stepHeight * stepIndex + (stepHeight * 0.1); // Smaller offset for earlier appearance
 				if(config.type === 'sportsballs') {originalHorizontal = (windowWidth / 2 - 55)
 				} else if (config.type === 'glassbottles') {originalHorizontal = (windowWidth / 2 - 55) + .25 * 85
 				} else if (config.type === 'plastics') {originalHorizontal = (windowWidth / 2 - 55) + .5 * 85
 				} else if (config.type === 'wrappers') {originalHorizontal = (windowWidth / 2 - 55) + .75 * 85
 				} else if (config.type === 'plasticbags') {originalHorizontal = (windowWidth / 2 - 55) + 85
 				}
-				earlyAppearanceOffset = windowHeight * 17.9; // Smaller offset for earlier appearance
 			} else {
 				earlyAppearanceOffset = minInitialOffset + Math.random() * (maxInitialOffset - minInitialOffset);
 			}
