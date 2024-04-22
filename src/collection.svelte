@@ -123,7 +123,7 @@
 		left: 50%; /* Center horizontally in the viewport */
 		transform: translate(-50%);
 		position: sticky;
-		background-image: url("/MrTrashWheel.png");
+		background-image: url("../MrTrashWheel.png");
 		background-size: 100%;
 		background-repeat: no-repeat;
 		z-index: 100000;

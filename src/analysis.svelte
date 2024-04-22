@@ -66,6 +66,7 @@
         display: flex;
         flex-wrap: wrap;
         text-align: center;
+        margin-left: 2px
     }
 	.shape {
 		width: 5px;
@@ -73,7 +74,6 @@
 		z-index: 1000000;
         margin: 1px;
 		border-radius: 25px;
-
 	}
 </style>
   
