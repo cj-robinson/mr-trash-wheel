@@ -1,1 +1,1 @@
-Repo for the [Mr Trash Wheel interactive](https://cj-robinson.github.io/mr-trash-wheel/)
+Code for the [Mr Trash Wheel interactive](https://cj-robinson.github.io/mr-trash-wheel/) built in Svelte, a personal project I undertook as a part of [tidytuesday](https://github.com/rfordatascience/tidytuesday). 
